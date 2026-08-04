@@ -467,7 +467,7 @@ async function resolveYouTubePlaylist(url) {
     };
   } catch (error) {
     console.error('YouTube playlist resolver error:', error.message);
-    throw new Error('Failed to resolve YouTube playlist (IP might be blocked by YouTube)');
+    throw new Error(`Failed to resolve YouTube playlist: ${error.message}`);
   }
 }
 
@@ -711,7 +711,7 @@ app.post('/api/search', async (req, res) => {
       } else if (queryOrUrl.includes('anghami.com')) {
         metadata = await resolveAnghamiTrack(queryOrUrl);
       } else if (queryOrUrl.includes('youtube.com') || queryOrUrl.includes('youtu.be')) {
-        if (queryOrUrl.includes('list=')) {
+        if (queryOrUrl.includes('list=') && (queryOrUrl.includes('/playlist') || queryOrUrl.includes('videoseries'))) {
           metadata = await resolveYouTubePlaylist(queryOrUrl);
         } else {
           metadata = await resolveYouTubeTrack(queryOrUrl);
@@ -891,7 +891,7 @@ app.post('/api/download', async (req, res) => {
       if (error) {
         console.error('yt-dlp execution error:', error.message);
         console.error('yt-dlp stderr:', stderr);
-        return res.status(500).json({ error: 'Audio download and conversion failed.' });
+        return res.status(500).json({ error: `Audio download and conversion failed. Detail: ${error.message}. Stderr: ${stderr}` });
       }
 
       console.log('yt-dlp finished download and mp3 conversion.');
