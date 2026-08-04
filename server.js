@@ -420,7 +420,7 @@ async function resolveYouTubePlaylist(url) {
     const playlistId = match ? match[1] : '';
     if (!playlistId) throw new Error('Invalid YouTube playlist URL');
 
-    const ytdlpPath = path.join(__dirname, 'bin', 'yt-dlp.exe');
+    const ytdlpPath = ytDlpPath;
     const args = [
       '--js-runtimes', 'node',
       '--impersonate', 'chrome',
@@ -481,7 +481,7 @@ async function resolveSoundCloudPlaylist(url) {
   try {
     console.log(`Resolving SoundCloud Playlist URL: ${url}`);
     
-    const ytdlpPath = path.join(__dirname, 'bin', 'yt-dlp.exe');
+    const ytdlpPath = ytDlpPath;
     const args = [
       '--no-cache-dir',
       '--flat-playlist',
