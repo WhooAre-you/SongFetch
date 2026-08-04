@@ -1,0 +1,12 @@
+# Dependency directories
+node_modules/
+
+# Local binaries (yt-dlp is downloaded dynamically on server boot)
+bin/
+
+# Temporary storage for audio downloads/conversions
+temp/
+
+# System files
+.DS_Store
+Thumbs.db
