@@ -38,6 +38,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const playlistProgressFill = document.getElementById('playlist-progress-fill');
     const playlistProgressStatus = document.getElementById('playlist-progress-status');
 
+    // Search options elements
+    const searchOptionsResult = document.getElementById('search-options-result');
+    const searchOptionsList = document.getElementById('search-options-list');
+
     let currentSongData = null;
 
     // Show/hide clear button on input change
@@ -78,6 +82,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loader.classList.add('hidden');
         resultSection.classList.add('hidden');
         playlistResult.classList.add('hidden');
+        searchOptionsResult.classList.add('hidden');
         errorCard.classList.add('hidden');
         downloadProgress.classList.add('hidden');
         downloadBtn.disabled = false;
@@ -88,11 +93,12 @@ document.addEventListener('DOMContentLoaded', () => {
         progressFill.style.width = '0%';
         progressPercent.textContent = '0%';
 
-        // Reset playlist UI
+        // Reset playlist and options UI
         playlistProgress.classList.add('hidden');
         playlistProgressFill.style.width = '0%';
         playlistProgressPercent.textContent = '0/0';
         playlistTracksList.innerHTML = '';
+        searchOptionsList.innerHTML = '';
         downloadAllBtn.disabled = false;
     }
 
@@ -212,6 +218,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 downloadAllBtn.onclick = async () => {
                     await downloadAllPlaylistTracks(data.tracks);
                 };
+            } else if (data.isOptionsList) {
+                // Populate Search Options list for verification
+                searchOptionsList.innerHTML = '';
+                data.options.forEach((track, index) => {
+                    const row = document.createElement('div');
+                    row.className = 'playlist-track-row';
+                    row.setAttribute('data-index', index);
+                    
+                    const safeMiniArtwork = track.artwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=80&q=80';
+                    row.innerHTML = `
+                        <div class="playlist-track-details">
+                            <div class="playlist-track-thumb-wrap">
+                                <img class="playlist-track-mini-cover" src="${safeMiniArtwork}" alt="Track Cover"
+                                    onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=80&q=80'">
+                            </div>
+                            <div class="playlist-track-text">
+                                <span class="playlist-track-title">${track.title}</span>
+                                <span class="playlist-track-artist">${track.artist}</span>
+                            </div>
+                        </div>
+                        <div class="playlist-track-actions">
+                            <button class="playlist-track-preview-btn" title="Select song" id="select-btn-${index}">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"></polyline>
+                                </svg>
+                            </button>
+                        </div>
+                    `;
+                    
+                    searchOptionsList.appendChild(row);
+
+                    // Row click triggers preview/select
+                    row.addEventListener('click', async () => {
+                        await previewPlaylistTrack(track, row);
+                    });
+                });
+                
+                searchOptionsResult.classList.remove('hidden');
+                searchOptionsResult.scrollIntoView({ behavior: 'smooth', block: 'start' });
             } else {
                 // Store song data globally for single download
                 currentSongData = data;
@@ -369,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/search', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ queryOrUrl: query })
+                body: JSON.stringify({ queryOrUrl: query, resolveDirect: true })
             });
 
             const data = await response.json();

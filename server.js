@@ -114,6 +114,40 @@ async function searchiTunes(term) {
   return null;
 }
 
+// Helper: Search iTunes API for multiple matches
+async function searchiTunesMultiple(term, limit = 10) {
+  try {
+    console.log(`Searching iTunes API for multiple matches: "${term}"`);
+    const response = await axios.get('https://itunes.apple.com/search', {
+      params: {
+        term: term,
+        media: 'music',
+        entity: 'song',
+        limit: limit
+      }
+    });
+    if (response.data && response.data.results && response.data.results.length > 0) {
+      return response.data.results.map(track => {
+        let artwork = track.artworkUrl100;
+        if (artwork) {
+          artwork = artwork.replace('100x100bb', '600x600bb').replace('100x100', '600x600');
+        }
+        return {
+          title: track.trackName,
+          artist: track.artistName,
+          album: track.collectionName || 'Single',
+          artwork: artwork,
+          youtubeUrl: '' // resolved when selected
+        };
+      });
+    }
+  } catch (error) {
+    console.error('iTunes API multiple search failed:', error.message);
+  }
+  return [];
+}
+
+
 // Helper: Query iTunes Lookup API
 async function lookupiTunesId(id) {
   try {
@@ -491,9 +525,43 @@ async function scrapeGeniusLyrics(title, artist) {
   }
 }
 
+// Helper: Extract multiple entry results from yt-dlp JSON search response
+function extractEntriesFromYtDlp(data, albumLabel) {
+  const options = [];
+  if (data && data.entries && data.entries.length > 0) {
+    data.entries.forEach(video => {
+      if (video && video.title) {
+        let title = video.title;
+        let artist = video.uploader || 'Unknown Artist';
+        if (title.includes(' - ')) {
+          const parts = title.split(' - ');
+          artist = parts[0].trim();
+          title = parts[1].trim();
+        }
+        
+        let artwork = '';
+        if (video.thumbnails && video.thumbnails.length > 0) {
+          artwork = video.thumbnails[video.thumbnails.length - 1].url;
+        } else if (video.thumbnail) {
+          artwork = video.thumbnail;
+        }
+
+        options.push({
+          title,
+          artist,
+          album: albumLabel,
+          artwork,
+          youtubeUrl: video.webpage_url || video.url || `https://www.youtube.com/watch?v=${video.id}`
+        });
+      }
+    });
+  }
+  return options;
+}
+
 // Route: Search / Resolve Link
 app.post('/api/search', async (req, res) => {
-  const { queryOrUrl } = req.body;
+  const { queryOrUrl, resolveDirect } = req.body;
   if (!queryOrUrl) {
     return res.status(400).json({ error: 'Search query or URL is required' });
   }
@@ -502,7 +570,7 @@ app.post('/api/search', async (req, res) => {
     let metadata = null;
     let isUrl = false;
 
-    if (queryOrUrl.startsWith('http://') || queryOrUrl.startsWith('https://')) {
+    if (queryOrUrl.startsWith('http://') || queryOrUrl.startsWith('https://') || resolveDirect) {
       isUrl = true;
       if (queryOrUrl.includes('spotify.com')) {
         // Playlists are not supported — treat every Spotify URL as a single track
@@ -533,112 +601,65 @@ app.post('/api/search', async (req, res) => {
         return res.status(400).json({ error: 'Unsupported URL platform. Use Spotify, YouTube, Apple Music, Anghami, or SoundCloud.' });
       }
     } else {
-      // General Search query
-      metadata = await searchiTunes(queryOrUrl);
-      if (!metadata) {
+      // General Search query - retrieve 5-10 options for validation
+      let options = await searchiTunesMultiple(queryOrUrl, 10);
+      
+      if (!options || options.length === 0) {
         console.log(`Query "${queryOrUrl}" not found on iTunes. Trying YouTube search fallback...`);
         try {
-          const ytdlpPath = path.join(__dirname, 'bin', 'yt-dlp.exe');
           const args = [
             '--js-runtimes', 'node',
             '--impersonate', 'chrome',
             '--no-cache-dir',
             '-J',
-            `ytsearch1:${queryOrUrl}`
+            `ytsearch8:${queryOrUrl}`
           ];
           
           const jsonStr = await new Promise((resolve, reject) => {
-            execFile(ytdlpPath, args, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+            execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
               if (error) reject(new Error(stderr || error.message));
               else resolve(stdout);
             });
           });
           
           const data = JSON.parse(jsonStr);
-          const video = data.entries && data.entries.length > 0 ? data.entries[0] : null;
-          
-          if (video && video.title) {
-            let title = video.title;
-            let artist = video.uploader || 'Unknown Artist';
-            if (title.includes(' - ')) {
-              const parts = title.split(' - ');
-              artist = parts[0].trim();
-              title = parts[1].trim();
-            }
-            
-            let artwork = '';
-            if (video.thumbnails && video.thumbnails.length > 0) {
-              artwork = video.thumbnails[video.thumbnails.length - 1].url;
-            } else if (video.thumbnail) {
-              artwork = video.thumbnail;
-            }
-
-            metadata = {
-              title,
-              artist,
-              album: 'YouTube Search Fallback',
-              artwork,
-              youtubeUrl: video.webpage_url || `https://www.youtube.com/watch?v=${video.id}`
-            };
-          }
+          options = extractEntriesFromYtDlp(data, 'YouTube Search Fallback');
         } catch (ytError) {
           console.error('YouTube search fallback error:', ytError.message);
         }
       }
 
-      // If still not found, try SoundCloud search as secondary fallback
-      if (!metadata) {
+      if (!options || options.length === 0) {
         console.log(`Query "${queryOrUrl}" not found on YouTube. Trying SoundCloud search fallback...`);
         try {
-          const ytdlpPath = path.join(__dirname, 'bin', 'yt-dlp.exe');
           const args = [
             '--no-cache-dir',
             '-J',
-            `scsearch1:${queryOrUrl}`
+            `scsearch8:${queryOrUrl}`
           ];
           
           const jsonStr = await new Promise((resolve, reject) => {
-            execFile(ytdlpPath, args, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
+            execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
               if (error) reject(new Error(stderr || error.message));
               else resolve(stdout);
             });
           });
           
           const data = JSON.parse(jsonStr);
-          const video = data.entries && data.entries.length > 0 ? data.entries[0] : null;
-          
-          if (video && video.title) {
-            let title = video.title;
-            let artist = video.uploader || 'Unknown Artist';
-            if (title.includes(' - ')) {
-              const parts = title.split(' - ');
-              artist = parts[0].trim();
-              title = parts[1].trim();
-            }
-            
-            let artwork = '';
-            if (video.thumbnails && video.thumbnails.length > 0) {
-              artwork = video.thumbnails[video.thumbnails.length - 1].url;
-            } else if (video.thumbnail) {
-              artwork = video.thumbnail;
-            }
-
-            metadata = {
-              title,
-              artist,
-              album: 'SoundCloud Search Fallback',
-              artwork,
-              youtubeUrl: video.webpage_url || video.url
-            };
-          }
+          options = extractEntriesFromYtDlp(data, 'SoundCloud Search Fallback');
         } catch (scError) {
           console.error('SoundCloud search fallback error:', scError.message);
         }
       }
 
-      if (!metadata) {
+      if (!options || options.length === 0) {
         return res.status(404).json({ error: 'No songs found matching your search.' });
       }
+
+      return res.json({
+        isOptionsList: true,
+        options: options
+      });
     }
 
     if (!metadata) {
