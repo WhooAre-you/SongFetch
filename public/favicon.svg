@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">
+  <defs>
+    <linearGradient id="noteGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8b5cf6"/>
+      <stop offset="100%" style="stop-color:#d946ef"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#a855f7;stop-opacity:0.4"/>
+      <stop offset="100%" style="stop-color:#07080d;stop-opacity:0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Dark background, no border -->
+  <rect width="100" height="100" fill="#07080d"/>
+
+  <!-- Glow bloom -->
+  <ellipse cx="52" cy="54" rx="38" ry="38" fill="url(#glow)"/>
+
+  <!-- Music note stem -->
+  <rect x="58" y="22" width="7" height="38" rx="3.5" fill="url(#noteGrad)"/>
+
+  <!-- Note flag -->
+  <path d="M65 22 Q85 30 80 48 Q72 38 65 40 Z" fill="url(#noteGrad)"/>
+
+  <!-- Note head -->
+  <ellipse cx="50" cy="63" rx="13" ry="9" transform="rotate(-15 50 63)" fill="url(#noteGrad)"/>
+</svg>
