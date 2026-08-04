@@ -153,31 +153,56 @@ document.addEventListener('DOMContentLoaded', () => {
                 data.tracks.forEach((track, index) => {
                     const row = document.createElement('div');
                     row.className = 'playlist-track-row';
+                    row.setAttribute('data-index', index);
                     
                     const safeMiniArtwork = track.artwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=80&q=80';
                     row.innerHTML = `
                         <div class="playlist-track-details">
-                            <img class="playlist-track-mini-cover" src="${safeMiniArtwork}" alt="Track Cover">
+                            <div class="playlist-track-thumb-wrap">
+                                <img class="playlist-track-mini-cover" src="${safeMiniArtwork}" alt="Track Cover"
+                                    onerror="this.src='https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=80&q=80'">
+                            </div>
                             <div class="playlist-track-text">
                                 <span class="playlist-track-title">${track.title}</span>
                                 <span class="playlist-track-artist">${track.artist}</span>
                             </div>
                         </div>
-                        <button class="playlist-track-download-btn" title="Download track" id="track-btn-${index}">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                        </button>
+                        <div class="playlist-track-actions">
+                            <button class="playlist-track-preview-btn" title="Preview song details" id="preview-btn-${index}">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                            </button>
+                            <button class="playlist-track-download-btn" title="Download track" id="track-btn-${index}">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="7 10 12 15 17 10"></polyline>
+                                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                                </svg>
+                            </button>
+                        </div>
                     `;
                     
                     playlistTracksList.appendChild(row);
 
-                    // Add download click listener
+                    // Download button
                     const btn = row.querySelector('.playlist-track-download-btn');
-                    btn.addEventListener('click', async () => {
+                    btn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
                         await downloadPlaylistTrack(track, btn);
+                    });
+
+                    // Preview button — look up the individual song
+                    const previewBtn = row.querySelector('.playlist-track-preview-btn');
+                    previewBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await previewPlaylistTrack(track, row);
+                    });
+
+                    // Clicking the row itself also triggers preview
+                    row.addEventListener('click', async () => {
+                        await previewPlaylistTrack(track, row);
                     });
                 });
 
@@ -320,8 +345,73 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Download error:', error);
             updateProgressUI(0, `Error: ${error.message}`);
             downloadBtn.disabled = false;
+        }\n    });
+
+    // Preview an individual track from the playlist — look it up and show the single result card
+    async function previewPlaylistTrack(track, rowEl) {
+        // Highlight selected row
+        document.querySelectorAll('.playlist-track-row').forEach(r => r.classList.remove('selected'));
+        rowEl.classList.add('selected');
+
+        // Show loader
+        loader.classList.remove('hidden');
+        resultSection.classList.add('hidden');
+        errorCard.classList.add('hidden');
+        loaderText.textContent = `Looking up "${track.title}"...`;
+
+        try {
+            // Use the track's direct URL if available, otherwise search by title + artist
+            const query = track.youtubeUrl && track.youtubeUrl.startsWith('http')
+                ? track.youtubeUrl
+                : `${track.title} ${track.artist}`;
+
+            const response = await fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ queryOrUrl: query })
+            });
+
+            const data = await response.json();
+            loader.classList.add('hidden');
+
+            if (!response.ok || data.isPlaylist) {
+                throw new Error(data.error || 'Could not fetch individual track data.');
+            }
+
+            // Populate the single song card
+            currentSongData = data;
+            coverArt.src = data.artwork || track.artwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80';
+            coverArt.onerror = () => { coverArt.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80'; };
+            songTitle.textContent = data.title;
+            songArtist.textContent = data.artist;
+            songAlbum.textContent = data.album || 'Single';
+            lyricsText.textContent = data.lyrics || 'Lyrics not found.';
+
+            // Reset download button
+            downloadBtn.disabled = false;
+            downloadBtn.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <span>Download MP3</span>
+            `;
+            downloadProgress.classList.add('hidden');
+
+            resultSection.classList.remove('hidden');
+
+            // Smoothly scroll to the result card
+            resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        } catch (error) {
+            loader.classList.add('hidden');
+            errorCard.classList.remove('hidden');
+            errorMessage.textContent = error.message;
+            rowEl.classList.remove('selected');
         }
-    });
+    }
+
     // Download a single track from playlist list
     async function downloadPlaylistTrack(track, btnElement) {
         if (btnElement.classList.contains('downloading') || btnElement.classList.contains('success')) return;
