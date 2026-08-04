@@ -570,7 +570,7 @@ app.post('/api/search', async (req, res) => {
     let metadata = null;
     let isUrl = false;
 
-    if (queryOrUrl.startsWith('http://') || queryOrUrl.startsWith('https://') || resolveDirect) {
+    if (queryOrUrl.startsWith('http://') || queryOrUrl.startsWith('https://')) {
       isUrl = true;
       if (queryOrUrl.includes('spotify.com')) {
         // Playlists are not supported — treat every Spotify URL as a single track
@@ -601,65 +601,160 @@ app.post('/api/search', async (req, res) => {
         return res.status(400).json({ error: 'Unsupported URL platform. Use Spotify, YouTube, Apple Music, Anghami, or SoundCloud.' });
       }
     } else {
-      // General Search query - retrieve 5-10 options for validation
-      let options = await searchiTunesMultiple(queryOrUrl, 10);
-      
-      if (!options || options.length === 0) {
-        console.log(`Query "${queryOrUrl}" not found on iTunes. Trying YouTube search fallback...`);
-        try {
-          const args = [
-            '--js-runtimes', 'node',
-            '--impersonate', 'chrome',
-            '--no-cache-dir',
-            '-J',
-            `ytsearch8:${queryOrUrl}`
-          ];
-          
-          const jsonStr = await new Promise((resolve, reject) => {
-            execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
-              if (error) reject(new Error(stderr || error.message));
-              else resolve(stdout);
+      if (resolveDirect) {
+        // Direct single-song lookup requested from search options list selection
+        metadata = await searchiTunes(queryOrUrl);
+        
+        if (!metadata) {
+          console.log(`Query "${queryOrUrl}" not found on iTunes for direct lookup. Trying YouTube search fallback...`);
+          try {
+            const args = [
+              '--js-runtimes', 'node',
+              '--impersonate', 'chrome',
+              '--no-cache-dir',
+              '-J',
+              `ytsearch1:${queryOrUrl}`
+            ];
+            const jsonStr = await new Promise((resolve, reject) => {
+              execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+                if (error) reject(new Error(stderr || error.message));
+                else resolve(stdout);
+              });
             });
-          });
-          
-          const data = JSON.parse(jsonStr);
-          options = extractEntriesFromYtDlp(data, 'YouTube Search Fallback');
-        } catch (ytError) {
-          console.error('YouTube search fallback error:', ytError.message);
+            const data = JSON.parse(jsonStr);
+            const video = data.entries && data.entries.length > 0 ? data.entries[0] : null;
+            
+            if (video && video.title) {
+              let title = video.title;
+              let artist = video.uploader || 'Unknown Artist';
+              if (title.includes(' - ')) {
+                const parts = title.split(' - ');
+                artist = parts[0].trim();
+                title = parts[1].trim();
+              }
+              let artwork = '';
+              if (video.thumbnails && video.thumbnails.length > 0) {
+                artwork = video.thumbnails[video.thumbnails.length - 1].url;
+              } else if (video.thumbnail) {
+                artwork = video.thumbnail;
+              }
+              metadata = {
+                title,
+                artist,
+                album: 'YouTube Search Fallback',
+                artwork,
+                youtubeUrl: video.webpage_url || `https://www.youtube.com/watch?v=${video.id}`
+              };
+            }
+          } catch (ytError) {
+            console.error('YouTube search direct fallback error:', ytError.message);
+          }
         }
-      }
 
-      if (!options || options.length === 0) {
-        console.log(`Query "${queryOrUrl}" not found on YouTube. Trying SoundCloud search fallback...`);
-        try {
-          const args = [
-            '--no-cache-dir',
-            '-J',
-            `scsearch8:${queryOrUrl}`
-          ];
-          
-          const jsonStr = await new Promise((resolve, reject) => {
-            execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
-              if (error) reject(new Error(stderr || error.message));
-              else resolve(stdout);
+        if (!metadata) {
+          console.log(`Query "${queryOrUrl}" not found on YouTube for direct lookup. Trying SoundCloud search fallback...`);
+          try {
+            const args = [
+              '--no-cache-dir',
+              '-J',
+              `scsearch1:${queryOrUrl}`
+            ];
+            const jsonStr = await new Promise((resolve, reject) => {
+              execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+                if (error) reject(new Error(stderr || error.message));
+                else resolve(stdout);
+              });
             });
-          });
-          
-          const data = JSON.parse(jsonStr);
-          options = extractEntriesFromYtDlp(data, 'SoundCloud Search Fallback');
-        } catch (scError) {
-          console.error('SoundCloud search fallback error:', scError.message);
+            const data = JSON.parse(jsonStr);
+            const video = data.entries && data.entries.length > 0 ? data.entries[0] : null;
+            
+            if (video && video.title) {
+              let title = video.title;
+              let artist = video.uploader || 'Unknown Artist';
+              if (title.includes(' - ')) {
+                const parts = title.split(' - ');
+                artist = parts[0].trim();
+                title = parts[1].trim();
+              }
+              let artwork = '';
+              if (video.thumbnails && video.thumbnails.length > 0) {
+                artwork = video.thumbnails[video.thumbnails.length - 1].url;
+              } else if (video.thumbnail) {
+                artwork = video.thumbnail;
+              }
+              metadata = {
+                title,
+                artist,
+                album: 'SoundCloud Search Fallback',
+                artwork,
+                youtubeUrl: video.webpage_url || video.url
+              };
+            }
+          } catch (scError) {
+            console.error('SoundCloud search direct fallback error:', scError.message);
+          }
         }
-      }
 
-      if (!options || options.length === 0) {
-        return res.status(404).json({ error: 'No songs found matching your search.' });
-      }
+        if (!metadata) {
+          return res.status(404).json({ error: 'No songs found matching your search.' });
+        }
+      } else {
+        // Return 5-10 options for selection list
+        let options = await searchiTunesMultiple(queryOrUrl, 10);
+        
+        if (!options || options.length === 0) {
+          console.log(`Query "${queryOrUrl}" not found on iTunes. Trying YouTube search fallback...`);
+          try {
+            const args = [
+              '--js-runtimes', 'node',
+              '--impersonate', 'chrome',
+              '--no-cache-dir',
+              '-J',
+              `ytsearch8:${queryOrUrl}`
+            ];
+            const jsonStr = await new Promise((resolve, reject) => {
+              execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+                if (error) reject(new Error(stderr || error.message));
+                else resolve(stdout);
+              });
+            });
+            const data = JSON.parse(jsonStr);
+            options = extractEntriesFromYtDlp(data, 'YouTube Search Fallback');
+          } catch (ytError) {
+            console.error('YouTube search fallback error:', ytError.message);
+          }
+        }
 
-      return res.json({
-        isOptionsList: true,
-        options: options
-      });
+        if (!options || options.length === 0) {
+          console.log(`Query "${queryOrUrl}" not found on YouTube. Trying SoundCloud search fallback...`);
+          try {
+            const args = [
+              '--no-cache-dir',
+              '-J',
+              `scsearch8:${queryOrUrl}`
+            ];
+            const jsonStr = await new Promise((resolve, reject) => {
+              execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+                if (error) reject(new Error(stderr || error.message));
+                else resolve(stdout);
+              });
+            });
+            const data = JSON.parse(jsonStr);
+            options = extractEntriesFromYtDlp(data, 'SoundCloud Search Fallback');
+          } catch (scError) {
+            console.error('SoundCloud search fallback error:', scError.message);
+          }
+        }
+
+        if (!options || options.length === 0) {
+          return res.status(404).json({ error: 'No songs found matching your search.' });
+        }
+
+        return res.json({
+          isOptionsList: true,
+          options: options
+        });
+      }
     }
 
     if (!metadata) {
