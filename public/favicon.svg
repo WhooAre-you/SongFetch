@@ -5,23 +5,26 @@
       <stop offset="100%" style="stop-color:#d946ef"/>
     </linearGradient>
     <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" style="stop-color:#a855f7;stop-opacity:0.4"/>
+      <stop offset="0%" style="stop-color:#a855f7;stop-opacity:0.45"/>
       <stop offset="100%" style="stop-color:#07080d;stop-opacity:0"/>
     </radialGradient>
   </defs>
 
-  <!-- Dark background, no border -->
+  <!-- Dark background -->
   <rect width="100" height="100" fill="#07080d"/>
 
-  <!-- Glow bloom -->
-  <ellipse cx="52" cy="54" rx="38" ry="38" fill="url(#glow)"/>
+  <!-- Glow bloom centered -->
+  <ellipse cx="50" cy="50" rx="40" ry="40" fill="url(#glow)"/>
 
-  <!-- Music note stem -->
-  <rect x="58" y="22" width="7" height="38" rx="3.5" fill="url(#noteGrad)"/>
+  <!-- Note group centered: note spans roughly x=33..67, y=18..78 -->
+  <g transform="translate(50,50)">
+    <!-- Stem: right side, from top (-28) to bottom of head area (+18) -->
+    <rect x="10" y="-28" width="6" height="44" rx="3" fill="url(#noteGrad)"/>
 
-  <!-- Note flag -->
-  <path d="M65 22 Q85 30 80 48 Q72 38 65 40 Z" fill="url(#noteGrad)"/>
+    <!-- Flag: curves from top of stem -->
+    <path d="M16 -28 Q34 -18 30 2 Q22 -8 16 -6 Z" fill="url(#noteGrad)"/>
 
-  <!-- Note head -->
-  <ellipse cx="50" cy="63" rx="13" ry="9" transform="rotate(-15 50 63)" fill="url(#noteGrad)"/>
+    <!-- Note head: centered on stem base, slightly left -->
+    <ellipse cx="-1" cy="18" rx="12" ry="8" transform="rotate(-18 -1 18)" fill="url(#noteGrad)"/>
+  </g>
 </svg>
