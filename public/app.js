@@ -345,7 +345,8 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Download error:', error);
             updateProgressUI(0, `Error: ${error.message}`);
             downloadBtn.disabled = false;
-        }\n    });
+        }
+    });
 
     // Preview an individual track from the playlist — look it up and show the single result card
     async function previewPlaylistTrack(track, rowEl) {

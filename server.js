@@ -7,7 +7,7 @@ const path = require('path');
 const { execFile, exec } = require('child_process');
 const nodeID3 = require('node-id3');
 const ffmpegPath = require('ffmpeg-static');
-const { resolveYouTubePlaylist, resolveSoundCloudPlaylist, resolveSpotifyPlaylist } = require('./playlistResolvers');
+const { resolveYouTubePlaylist, resolveSoundCloudPlaylist } = require('./playlistResolvers');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -505,11 +505,11 @@ app.post('/api/search', async (req, res) => {
     if (queryOrUrl.startsWith('http://') || queryOrUrl.startsWith('https://')) {
       isUrl = true;
       if (queryOrUrl.includes('spotify.com')) {
+        // Playlists are not supported — treat every Spotify URL as a single track
         if (queryOrUrl.includes('/playlist/')) {
-          metadata = await resolveSpotifyPlaylist(queryOrUrl);
-        } else {
-          metadata = await resolveSpotifyTrack(queryOrUrl);
+          return res.status(400).json({ error: 'Spotify playlists are not supported. Please paste individual Spotify track links, or search by song name.' });
         }
+        metadata = await resolveSpotifyTrack(queryOrUrl);
       } else if (queryOrUrl.includes('music.apple.com')) {
         if (queryOrUrl.includes('/playlist/')) {
           throw new Error('Apple Music playlists cannot be resolved. Please download individual tracks or search by name.');
