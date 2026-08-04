@@ -427,3 +427,67 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadAllBtn.disabled = false;
     }
 });
+
+/* ─── PWA Install Logic ───────────────────────────────────────────── */
+
+// Register Service Worker
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .then(reg => console.log('[SW] Registered:', reg.scope))
+            .catch(err => console.warn('[SW] Registration failed:', err));
+    });
+}
+
+let deferredPrompt = null;
+const installBtn = document.getElementById('pwa-install-btn');
+
+// ── Android / Chrome: capture the install prompt ──
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+
+    // Show install button
+    if (installBtn) {
+        installBtn.classList.remove('hidden');
+    }
+});
+
+// When user clicks the install button
+if (installBtn) {
+    installBtn.addEventListener('click', async () => {
+        if (!deferredPrompt) return;
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === 'accepted') {
+            installBtn.classList.add('hidden');
+        }
+        deferredPrompt = null;
+    });
+}
+
+// Hide button after successful install
+window.addEventListener('appinstalled', () => {
+    if (installBtn) installBtn.classList.add('hidden');
+    deferredPrompt = null;
+});
+
+// ── iOS Safari: show manual banner ──
+const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+const isInStandaloneMode = window.navigator.standalone === true;
+const iosBannerDismissed = sessionStorage.getItem('iosBannerDismissed');
+
+if (isIos && !isInStandaloneMode && !iosBannerDismissed) {
+    const banner = document.getElementById('ios-install-banner');
+    const closeBtn = document.getElementById('ios-banner-close');
+    if (banner) {
+        // Show after a short delay so page has rendered
+        setTimeout(() => banner.classList.remove('hidden'), 1200);
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                banner.classList.add('hidden');
+                sessionStorage.setItem('iosBannerDismissed', '1');
+            });
+        }
+    }
+}

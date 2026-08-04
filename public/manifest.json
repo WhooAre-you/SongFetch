@@ -1,0 +1,23 @@
+{
+  "name": "SongFetch 1.0",
+  "short_name": "SongFetch",
+  "description": "Convert song links or search names into tagged, lyrics-embedded MP3 files.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0e12",
+  "theme_color": "#a855f7",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=192&q=80",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=512&q=80",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

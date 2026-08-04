@@ -9,6 +9,11 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SongFetch">
+    <meta name="theme-color" content="#a855f7">
 </head>
 <body>
     <div class="background-glow">
@@ -28,6 +33,14 @@
                 <span>SongFetch <span class="version">1.0</span></span>
             </div>
             <p class="tagline">Convert any song link or name into a tagged, lyrics-embedded MP3 file</p>
+            <button id="pwa-install-btn" class="pwa-install-btn hidden">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="12" y1="8" x2="12" y2="16"></line>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span>Add to Home Screen</span>
+            </button>
         </header>
 
         <!-- Main Card -->
@@ -219,6 +232,22 @@
         </footer>
     </div>
     
+    <!-- iOS Install Banner (shown on Safari only) -->
+    <div id="ios-install-banner" class="ios-install-banner hidden">
+        <div class="ios-banner-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18V5l12-2v13"></path>
+                <circle cx="6" cy="18" r="3"></circle>
+                <circle cx="18" cy="16" r="3"></circle>
+            </svg>
+        </div>
+        <div class="ios-banner-text">
+            <strong>Add SongFetch to Home Screen</strong>
+            <span>Tap <strong>Share</strong> then <strong>"Add to Home Screen"</strong> to install</span>
+        </div>
+        <button class="ios-banner-close" id="ios-banner-close" aria-label="Dismiss">✕</button>
+    </div>
+
     <script src="app.js"></script>
 </body>
 </html>

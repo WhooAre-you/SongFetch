@@ -140,6 +140,118 @@ body {
     font-weight: 400;
 }
 
+/* PWA Install Button */
+.pwa-install-btn {
+    margin-top: 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 1rem;
+    background: rgba(139, 92, 246, 0.08);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    border-radius: 999px;
+    color: var(--color-primary);
+    font-family: var(--font-secondary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    animation: fadeIn 0.4s ease;
+    letter-spacing: 0.02em;
+}
+
+.pwa-install-btn:hover {
+    background: rgba(139, 92, 246, 0.18);
+    border-color: rgba(139, 92, 246, 0.5);
+    box-shadow: 0 0 16px rgba(139, 92, 246, 0.2);
+    transform: translateY(-1px);
+}
+
+.pwa-install-btn:active {
+    transform: translateY(0);
+}
+
+/* iOS install banner */
+.ios-install-banner {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 3rem);
+    max-width: 420px;
+    background: rgba(15, 17, 28, 0.92);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    animation: slideUp 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.ios-install-banner.hidden { display: none; }
+
+.ios-banner-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    background: var(--color-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: white;
+}
+
+.ios-banner-text {
+    flex: 1;
+    font-family: var(--font-secondary);
+}
+
+.ios-banner-text strong {
+    display: block;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: white;
+    margin-bottom: 0.2rem;
+}
+
+.ios-banner-text span {
+    font-size: 0.77rem;
+    color: var(--color-text-muted);
+    line-height: 1.4;
+}
+
+.ios-banner-close {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    font-size: 1rem;
+    transition: var(--transition-smooth);
+}
+
+.ios-banner-close:hover {
+    background: rgba(255,255,255,0.12);
+    color: white;
+}
+
+@keyframes slideUp {
+    from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
 /* Glassmorphism Card */
 .main-card {
     background: var(--color-card-bg);
