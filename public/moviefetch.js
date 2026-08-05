@@ -578,17 +578,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!res.ok) throw new Error();
                 data = await res.json();
 
-                // Prestige serves video via BiBplayer (JS-loaded), so if no direct
-                // download links were scraped, offer the episode watch page as stream server
+                // Filter scraped links to keep ONLY actual video/CDN file hosts.
+                // Prestige pages contain many internal navigation links (index.php,
+                // watch.php, series1.php) that are NOT video files — discard them.
+                const VIDEO_HOSTS = [
+                    '.mp4', '.m3u8', '.mkv', '.avi', '.webm',
+                    'vidtube', 'updown', 'bowfile', 'mdiaload', 'gofile',
+                    'mediafire', 'streamtape', 'dood', 'filemoon',
+                    'embed.php', 'player.', 'cdn.', 'stream'
+                ];
+                if (data.downloads && data.downloads.length > 0) {
+                    data.downloads = data.downloads.filter(d =>
+                        d.url && VIDEO_HOSTS.some(h => d.url.includes(h))
+                    );
+                }
+
+                // If still no real video links found (Prestige uses BiBplayer / JS-loaded
+                // streams that can't be resolved server-side), offer the embed player page
+                // so the user can at least watch the episode in-browser.
                 if (!data.downloads || data.downloads.length === 0) {
-                    // Extract embed_url from pm_video_data pattern in URL (vid=XXX)
                     const vidMatch = epUrl.match(/vid=([a-z0-9]+)/i);
                     const embedUrl = vidMatch
                         ? `https://a.prstej.net/embed.php?vid=${vidMatch[1]}`
                         : epUrl;
 
                     data.downloads = [{
-                        quality: 'HD Stream (Prestige Player)',
+                        quality: '▶ Watch Online (Prestige Player)',
                         url: embedUrl,
                         host: 'a.prstej.net',
                         size: 'Stream'
@@ -740,6 +755,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!videoUrl) {
             showError('No valid download URL found for this option.');
+            return;
+        }
+
+        // If the URL is a stream/embed player page (not a direct video file),
+        // open it in a new tab so the user can watch it directly in the browser.
+        const isStreamPage = 
+            videoUrl.includes('embed.php') ||
+            videoUrl.includes('embed.') ||
+            videoUrl.includes('player.') ||
+            videoUrl.includes('/watch') ||
+            (selectedDownloadOption.size === 'Stream');
+
+        if (isStreamPage) {
+            window.open(videoUrl, '_blank');
+            updateProgressUI(100, '▶ Opening stream in new tab...');
+            downloadProgress.classList.remove('hidden');
             return;
         }
 
