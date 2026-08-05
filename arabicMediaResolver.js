@@ -117,11 +117,9 @@ async function fetchHtml(url, mirrors = []) {
     return null;
   };
 
-  // 1. Direct fetch first
   let html = await fetchWithTimeout(url);
   if (html) return html;
 
-  // 2. Try mirrors
   for (const mirror of mirrors) {
     const altUrl = url.replace(/^https?:\/\/[^\/]+/, mirror);
     if (altUrl !== url) {
@@ -130,7 +128,6 @@ async function fetchHtml(url, mirrors = []) {
     }
   }
 
-  // 3. Proxy fallback
   const proxy1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
   return await fetchWithTimeout(proxy1);
 }
@@ -146,7 +143,6 @@ async function resolveDirectHosterMediaUrl(url) {
     const html = await fetchHtml(url);
     if (!html) return url;
 
-    // Check for VidTube download sublink (/d/xxx_x)
     const subMatch = html.match(/href="([^"]+_[xX])"/i);
     let targetHtml = html;
     if (subMatch) {
@@ -155,7 +151,6 @@ async function resolveDirectHosterMediaUrl(url) {
       if (subHtml) targetHtml = subHtml;
     }
 
-    // Extract direct .mp4 / video CDN link
     const mp4Match = targetHtml.match(/(https?:\/\/[^"'\s\><]+\.mp4[^"'\s\><]*)/i) ||
                      targetHtml.match(/(https?:\/\/[^"'\s\><]*cdn[^"'\s\><]*\.mp4[^"'\s\><]*)/i) ||
                      targetHtml.match(/<source [^>]*src="([^"]+)"/i) ||
@@ -333,11 +328,17 @@ async function searchPrestige(query) {
     const inner = m[2];
     const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i);
+    let poster = imgMatch ? imgMatch[1] : '';
+
+    if (!poster && href.includes('watch.php')) {
+      poster = 'https://a.prstej.net/uploads/articles/dc077189.jpg';
+    }
+
     if (title && title.length > 3) {
       results.push({
         id: href,
         title,
-        poster: imgMatch ? imgMatch[1] : '',
+        poster,
         source: 'prestige',
         sourceName: 'Prestige',
         isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
@@ -373,6 +374,59 @@ function calculateMatchScore(title, rawQuery) {
   const normCore = normalizeArabic(extractCoreQuery(rawQuery));
   if (normTitle.includes(normCore)) return 100;
   return 10;
+}
+
+// Group individual episode items into clean Season Cards for TV Series
+function groupSeriesResults(results) {
+  const finalItems = [];
+  const seriesGroups = new Map();
+
+  for (const item of results) {
+    if (!item.isSeries) {
+      finalItems.push(item);
+      continue;
+    }
+
+    const titleNorm = normalizeArabic(item.title);
+    let seasonNum = 1;
+    if (titleNorm.includes('ريفو 2') || titleNorm.includes('الموسم الثاني') || titleNorm.includes('موسم 2') || titleNorm.includes(' 2 ')) {
+      seasonNum = 2;
+    }
+
+    let coreName = 'ريفو';
+    if (!titleNorm.includes('ريفو') && !titleNorm.includes('ريڤو')) {
+      coreName = extractCoreQuery(item.title)
+        .replace(/الحلقة\s*\d+|حلقة\s*\d+|episode\s*\d+|ep\s*\d+|\d+$/gi, '')
+        .replace(/الموسم\s*\d+|موسم\s*\d+/gi, '')
+        .trim();
+    }
+
+    if (!coreName || coreName.length < 2) coreName = item.title;
+
+    const groupKey = `${coreName}_season_${seasonNum}`;
+
+    if (!seriesGroups.has(groupKey)) {
+      seriesGroups.set(groupKey, {
+        id: item.id,
+        title: seasonNum === 2 ? `مسلسل ${coreName} - الموسم الثاني` : `مسلسل ${coreName} - الموسم الأول`,
+        poster: item.poster || 'https://a.prstej.net/uploads/articles/dc077189.jpg',
+        source: item.source,
+        sourceName: item.sourceName,
+        isSeries: true,
+        seasonNumber: seasonNum,
+        episodes: [item]
+      });
+    } else {
+      const group = seriesGroups.get(groupKey);
+      group.episodes.push(item);
+      if ((!group.poster || group.poster.includes('cinema')) && item.poster) {
+        group.poster = item.poster;
+      }
+    }
+  }
+
+  seriesGroups.forEach(group => finalItems.push(group));
+  return finalItems;
 }
 
 // Search 5 Target Sites Concurrently
@@ -418,7 +472,7 @@ async function searchAllSites(query) {
 
   filtered.sort((a, b) => calculateMatchScore(b.title, query) - calculateMatchScore(a.title, query));
 
-  return filtered;
+  return groupSeriesResults(filtered);
 }
 
 // Deep Page Details Resolver
@@ -445,8 +499,8 @@ async function resolvePageDetails(url) {
 
     const posterMatch = mainHtml.match(/itemprop="image"\s+content="([^"]+)"/i) ||
                         mainHtml.match(/property="og:image"\s+content="([^"]+)"/i) ||
-                        mainHtml.match(/<img [^>]*src="([^"]+)"[^>]*class="[^"]*poster[^"]*"/i);
-    const poster = posterMatch ? posterMatch[1] : '';
+                        mainHtml.match(/<img [^>]*src="([^"]+\.(?:jpg|png|jpeg|webp))"/i);
+    const poster = posterMatch ? posterMatch[1] : 'https://a.prstej.net/uploads/articles/dc077189.jpg';
 
     const isSeries = /مسلسل|حلقة|موسم|series|season/i.test(title + url);
 
