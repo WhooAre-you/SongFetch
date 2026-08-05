@@ -79,34 +79,45 @@ const TITLE_ALIASES = {
   'titanic': 'تيتانيك'
 };
 
-// Universal HTTP Fetcher with Failover Proxies
+// Universal Fast HTTP Fetcher with Concurrent Failover Proxies & 3.5s Timeout
 async function fetchHtml(url, mirrors = []) {
   const proxy1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
   const proxy2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
   
-  const urlsToTry = [
+  const candidates = [
     url,
     ...mirrors.filter(m => !url.startsWith(m)).map(m => url.replace(/^https?:\/\/[^\/]+/, m)),
     proxy1,
     proxy2
   ];
 
-  for (const targetUrl of urlsToTry) {
+  const fetchWithTimeout = async (targetUrl) => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 3500);
     try {
       const res = await fetch(targetUrl, {
         headers: BROWSER_HEADERS,
+        signal: controller.signal,
         redirect: 'follow'
       });
+      clearTimeout(timer);
       if (res.ok) {
         const text = await res.text();
-        if (text && text.length > 500) {
-          return text;
-        }
+        if (text && text.length > 400) return text;
       }
     } catch (e) {
-      // try next mirror/proxy
+      clearTimeout(timer);
     }
-  }
+    return null;
+  };
+
+  // Run candidates concurrently for instant response!
+  try {
+    const results = await Promise.all(candidates.slice(0, 3).map(fetchWithTimeout));
+    const valid = results.find(t => t && t.length > 400);
+    if (valid) return valid;
+  } catch (e) {}
+
   return null;
 }
 

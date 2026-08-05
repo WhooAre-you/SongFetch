@@ -669,8 +669,20 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!selectedDownloadOption) return;
 
         const subtitleLang = subtitlesSelect.value;
-        const videoUrl = selectedDownloadOption.link;
+        const videoUrl = selectedDownloadOption.url || selectedDownloadOption.link || selectedDownloadOption.id;
         const movieTitleText = activeMovieTitle;
+
+        if (!videoUrl) {
+            showError('No valid download URL found for this option.');
+            return;
+        }
+
+        // If it's a direct web page or mirror URL from Arabic site, open directly or start download
+        if (videoUrl.includes('topcinema') || videoUrl.includes('wecima') || videoUrl.includes('arabseed') || videoUrl.includes('movizland') || videoUrl.includes('qfilm') || videoUrl.includes('brstej')) {
+            window.open(videoUrl, '_blank');
+            showError(`Opening direct watch/download page on ${selectedDownloadOption.host || 'source'}...`);
+            return;
+        }
 
         downloadNowBtn.disabled = true;
         downloadProgress.classList.remove('hidden');
@@ -715,7 +727,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!response.ok) {
                 const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.error || 'Server processing failed.');
+                // Fallback to opening direct link
+                window.open(videoUrl, '_blank');
+                throw new Error(errData.error || 'Server proxying failed. Opening direct stream link in new tab...');
             }
 
             // Get exact content-length of the returned video stream
