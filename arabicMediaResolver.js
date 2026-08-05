@@ -1,6 +1,6 @@
 // ======================================================
 // arabicMediaResolver.js - Standalone Arabic Media Scraper
-// Handles 6 target sites: TopCinema, WeCima, ArabSeed, Movizland, QFilm, Prestige
+// Handles 5 target sites: TopCinema, WeCima, Movizland, QFilm, Prestige (ArabSeed removed)
 // Zero external dependencies required (uses built-in fetch)
 // ======================================================
 
@@ -16,12 +16,6 @@ const SITE_CONFIGS = {
     baseUrl: 'https://wecima.cx',
     mirrors: ['https://wecima.cx'],
     searchPath: '/search/'
-  },
-  arabseed: {
-    name: 'ArabSeed',
-    baseUrl: 'https://arabseeds.show',
-    mirrors: ['https://arabseeds.show', 'https://arabseeds.co'],
-    searchPath: '/?s='
   },
   movizland: {
     name: 'Movizland',
@@ -73,12 +67,33 @@ const TITLE_ALIASES = {
   'tenet': 'تينيت',
   'the dark knight': 'فارس الظلام',
   'the godfather': 'العراب',
-  'titanic': 'تيتانيك'
+  'titanic': 'تيتانيك',
+  'rivo': 'ريفو',
+  'ريفو': 'ريڤو'
 };
+
+const STOP_WORDS = ['مسلسل', 'فيلم', 'موسم', 'حلقة', 'كامل', 'مترجم', 'اونلاين', 'اون', 'لاين', 'مشاهدة', 'تحميل', 'hd', 'web-dl', '720p', '1080p', '4k'];
 
 const EXCLUDED_PATHS = [
   '/full-packs', '/category/', '/recent', '/netflix', '/top-rating', '/movies', '/series', '/dmca', '/contact', '/privacy'
 ];
+
+function normalizeArabic(text) {
+  if (!text) return '';
+  return text
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/ڤ/g, 'ف')
+    .toLowerCase()
+    .trim();
+}
+
+function extractCoreQuery(q) {
+  if (!q) return '';
+  const words = q.split(/\s+/).filter(w => !STOP_WORDS.includes(normalizeArabic(w)) && w.length > 1);
+  return words.join(' ') || q.trim();
+}
 
 async function fetchHtml(url, mirrors = []) {
   const proxy1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
@@ -221,7 +236,7 @@ async function searchWeCima(query) {
   const gridMatches = html.match(/<div class="GridItem"[\s\S]*?<\/ul>/gi) || html.match(/<div class="GridItem"[\s\S]*?<\/div>\s*<\/div>/gi) || [];
 
   for (const grid of gridMatches) {
-    const hrefMatch = grid.match(/href="(https?:\/\/wecima\.[^"]+\/watch\/[^"]+)"/i) || grid.match(/href="([^"]+\/watch\/[^"]+)"/i);
+    const hrefMatch = grid.match(/href="(https?:\/\/wecima\.[^"]+\/(?:watch|series)\/[^"]+)"/i) || grid.match(/href="([^"]+\/(?:watch|series)\/[^"]+)"/i);
     const titleMatch = grid.match(/title="([^"]+)"/i) || grid.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
     const posterMatch = grid.match(/data-src="([^"]+)"/i) || grid.match(/itemprop="thumbnailUrl"\s+content="([^"]+)"/i) || grid.match(/--image:url\(([^)]+)\)/i);
 
@@ -240,61 +255,6 @@ async function searchWeCima(query) {
           isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
         });
       }
-    }
-  }
-
-  return results;
-}
-
-// ArabSeed Scraper
-async function searchArabSeed(query) {
-  const results = [];
-  for (const mirror of SITE_CONFIGS.arabseed.mirrors) {
-    try {
-      const apiUrl = `${mirror}/wp-json/wp/v2/posts?search=${encodeURIComponent(query)}&per_page=10`;
-      const res = await fetch(apiUrl, { headers: BROWSER_HEADERS });
-      if (res.ok) {
-        const posts = await res.json();
-        if (Array.isArray(posts) && posts.length > 0) {
-          for (const post of posts) {
-            const title = post.title?.rendered?.replace(/<[^>]+>/g, '') || '';
-            const href = post.link || '';
-            if (title && href) {
-              results.push({
-                id: href,
-                title,
-                poster: '',
-                source: 'arabseed',
-                sourceName: 'ArabSeed',
-                isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
-              });
-            }
-          }
-          if (results.length > 0) return results;
-        }
-      }
-    } catch (e) {}
-  }
-
-  const url = `${SITE_CONFIGS.arabseed.baseUrl}/?s=${encodeURIComponent(query)}`;
-  const html = await fetchHtml(url, SITE_CONFIGS.arabseed.mirrors);
-  if (!html) return results;
-
-  const matches = [...html.matchAll(/<a [^>]*href="(https?:\/\/arabseeds\.[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
-  for (const m of matches) {
-    const href = m[1];
-    const inner = m[2];
-    const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-    const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i);
-    if (title && title.length > 3 && !href.endsWith('/films/') && !href.endsWith('/series/')) {
-      results.push({
-        id: href,
-        title,
-        poster: imgMatch ? imgMatch[1] : '',
-        source: 'arabseed',
-        sourceName: 'ArabSeed',
-        isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
-      });
     }
   }
 
@@ -364,13 +324,13 @@ async function searchPrestige(query) {
   if (!html) return [];
 
   const results = [];
-  const matches = [...html.matchAll(/<a [^>]*href="(https?:\/\/(?:brstej|prestige)\.[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const matches = [...html.matchAll(/<a [^>]*href="(https?:\/\/(?:brstej|prestige|prstej)\.[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
   for (const m of matches) {
     const href = m[1];
     const inner = m[2];
     const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i);
-    if (title && title.length > 3) {
+    if (title && title.length > 3 && !href.includes('cat67.php') && !href.includes('main430')) {
       results.push({
         id: href,
         title,
@@ -385,28 +345,48 @@ async function searchPrestige(query) {
   return results;
 }
 
-function isRelevantTitle(title, query) {
-  if (!title || !query) return true;
-  const t = title.toLowerCase();
-  const q = query.toLowerCase().trim();
+function isRelevantTitle(title, rawQuery) {
+  if (!title || !rawQuery) return true;
+  
+  const normTitle = normalizeArabic(title);
+  const normRaw = normalizeArabic(rawQuery);
+  const normCore = normalizeArabic(extractCoreQuery(rawQuery));
 
-  if (t.includes(q)) return true;
+  if (!normCore) return true;
 
-  const alias = TITLE_ALIASES[q];
-  if (alias && alias !== query.toLowerCase() && t.includes(alias)) return true;
+  if (normTitle.includes(normCore) || normTitle.includes(normRaw)) return true;
 
-  const words = q.split(/\s+/).filter(w => w.length > 2);
+  const alias = TITLE_ALIASES[normCore] || TITLE_ALIASES[normRaw];
+  if (alias && normTitle.includes(normalizeArabic(alias))) return true;
+
+  const words = normCore.split(/\s+/).filter(w => w.length > 1);
   if (words.length === 0) return true;
-  return words.some(w => t.includes(w));
+
+  return words.every(w => normTitle.includes(w));
 }
 
-// Search ALL 6 Sites Concurrently
-async function searchAllSites(query) {
-  console.log(`[ArabicResolver] Searching all sites: "${query}"`);
+function calculateMatchScore(title, rawQuery) {
+  const normTitle = normalizeArabic(title);
+  const normCore = normalizeArabic(extractCoreQuery(rawQuery));
+  if (normTitle.includes(normCore)) return 100;
+  return 10;
+}
 
+// Search 5 Target Sites Concurrently (ArabSeed removed)
+async function searchAllSites(query) {
+  console.log(`[ArabicResolver] Searching all sites for: "${query}"`);
+
+  const coreQuery = extractCoreQuery(query);
   const queriesToTry = [query];
-  const alias = TITLE_ALIASES[query.toLowerCase().trim()];
-  if (alias && alias !== query.toLowerCase()) queriesToTry.push(alias);
+  if (coreQuery && coreQuery !== query) queriesToTry.push(coreQuery);
+
+  const normCore = normalizeArabic(coreQuery);
+  if (normCore.includes('ريفو')) {
+    queriesToTry.push('ريڤو', 'ريفو');
+  }
+
+  const alias = TITLE_ALIASES[normCore];
+  if (alias && alias !== normCore) queriesToTry.push(alias);
 
   let combined = [];
 
@@ -414,7 +394,6 @@ async function searchAllSites(query) {
     const resultsArr = await Promise.allSettled([
       searchTopCinema(q),
       searchWeCima(q),
-      searchArabSeed(q),
       searchMovizland(q),
       searchQFilm(q),
       searchPrestige(q)
@@ -428,11 +407,15 @@ async function searchAllSites(query) {
   }
 
   const seen = new Set();
-  return combined.filter(item => {
+  const filtered = combined.filter(item => {
     if (!item.id || seen.has(item.id)) return false;
     seen.add(item.id);
     return isRelevantTitle(item.title, query);
   });
+
+  filtered.sort((a, b) => calculateMatchScore(b.title, query) - calculateMatchScore(a.title, query));
+
+  return filtered;
 }
 
 // Deep Page Details Resolver
@@ -517,7 +500,7 @@ async function resolvePageDetails(url) {
       for (const m of linkMatches) {
         const href = m[1];
         const text = m[2].replace(/<[^>]+>/g, '').trim();
-        if (href.startsWith('http') && !href.includes('topcinemaa.co') && !href.includes('wecima') && !href.includes('arabseeds') && href.length > 15) {
+        if (href.startsWith('http') && !href.includes('topcinemaa.co') && !href.includes('wecima') && href.length > 15) {
           let hostName = 'Direct Server';
           try { hostName = new URL(href).hostname.replace('www.', ''); } catch (e) {}
           downloads.push({
