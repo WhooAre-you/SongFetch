@@ -366,7 +366,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             
             const sourceName = item.source || 'WeFeed';
-            const sourceColor = 'rgba(147, 51, 234, 0.85)';
+            
+            // Map site name to distinct vibrant badge background color
+            const sourceColorMap = {
+                'TopCinema': '#ef4444',
+                'WeCima': '#a855f7',
+                'WeCima / MyCima': '#a855f7',
+                'ArabSeed': '#eab308',
+                'Movizland': '#06b6d4',
+                'QFilm': '#ec4899',
+                'Prestige': '#10b981',
+                'WeFeed': '#3b82f6'
+            };
+            const sourceColor = sourceColorMap[sourceName] || '#9333ea';
             const simplifiedTitle = buildDisplayTitle(item);
 
             card.innerHTML = `

@@ -1,58 +1,80 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 
-// Configured Base URLs for the 6 target sites
+// Configured Base URLs and mirrors for the 6 target sites
 const SITE_CONFIGS = {
   topcinema: {
     name: 'TopCinema',
-    baseUrl: 'https://topcinemaa.cam',
+    baseUrl: 'https://topcinemaa.co',
+    mirrors: ['https://topcinemaa.co', 'https://topcinemaa.cam', 'https://topcinema.cam'],
     searchPath: '/?s='
   },
   wecima: {
     name: 'WeCima / MyCima',
     baseUrl: 'https://wecima.cx',
+    mirrors: ['https://wecima.cx', 'https://mycima.wecima.cx'],
     searchPath: '/search/'
   },
   arabseed: {
     name: 'ArabSeed',
     baseUrl: 'https://arabseeds.show',
+    mirrors: ['https://arabseeds.show', 'https://a.arabseed.site', 'https://arabseed.net'],
     searchPath: '/?s='
   },
   movizland: {
     name: 'Movizland',
     baseUrl: 'https://movizland.online',
+    mirrors: ['https://movizland.online', 'https://movizland.com'],
     searchPath: '/?s='
   },
   qfilm: {
     name: 'QFilm',
     baseUrl: 'https://qfilm.vip',
+    mirrors: ['https://qfilm.vip'],
     searchPath: '/?s='
   },
   prestige: {
     name: 'Prestige',
     baseUrl: 'https://brstej.com',
+    mirrors: ['https://brstej.com', 'https://brstej.net'],
     searchPath: '/?s='
   }
 };
 
-const DEFAULT_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-  'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8'
+const BROWSER_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+  'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache',
+  'Sec-Ch-Ua': '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+  'Sec-Ch-Ua-Mobile': '?0',
+  'Sec-Ch-Ua-Platform': '"Windows"',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+  'Upgrade-Insecure-Requests': '1'
 };
 
-// Helper: Make HTTP request safely
-async function fetchHtml(url) {
-  try {
-    const response = await axios.get(url, {
-      headers: DEFAULT_HEADERS,
-      timeout: 10000
-    });
-    return response.data;
-  } catch (error) {
-    console.error(`[ArabicResolver] Error fetching URL (${url}):`, error.message);
-    return null;
+// Helper: Make HTTP request with mirror failovers
+async function fetchHtml(url, mirrors = []) {
+  const urlsToTry = [url, ...mirrors.map(m => url.replace(/^https?:\/\/[^\/]+/, m))];
+  
+  for (const targetUrl of urlsToTry) {
+    try {
+      const response = await axios.get(targetUrl, {
+        headers: BROWSER_HEADERS,
+        timeout: 8000
+      });
+      if (response.status === 200 && response.data) {
+        return response.data;
+      }
+    } catch (error) {
+      console.error(`[ArabicResolver] Mirror failed (${targetUrl}):`, error.message);
+    }
   }
+  return null;
 }
 
 // Helper: Extract poster URL reliably from img tag or background style
