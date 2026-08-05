@@ -125,6 +125,48 @@ document.addEventListener('DOMContentLoaded', () => {
         return titleClean;
     }
 
+    // Helper: Extract season number from raw title text or URL
+    function extractSeason(rawTitle, link) {
+        const arabicOrdinals = { 'الاول': 1, 'الأول': 1, 'الاولى': 1, 'الثاني': 2, 'الثانى': 2, 'الثانية': 2, 'الثالث': 3, 'الثالثة': 3, 'الرابع': 4, 'الرابعة': 4, 'الخامس': 5, 'الخامسة': 5, 'السادس': 6, 'السادسة': 6, 'السابع': 7, 'السابعة': 7, 'الثامن': 8, 'الثامنة': 8, 'التاسع': 9, 'التاسعة': 9, 'العاشر': 10, 'العاشرة': 10 };
+        let seasonNum = null;
+
+        // Try from title text
+        const titleMatch = rawTitle.match(/(?:الموسم|موسم)\s+(\S+)/);
+        if (titleMatch) {
+            seasonNum = arabicOrdinals[titleMatch[1]] || parseInt(titleMatch[1]) || null;
+        }
+
+        // Try English "Season X"
+        if (!seasonNum) {
+            const engMatch = rawTitle.match(/Season\s*(\d+)/i);
+            if (engMatch) seasonNum = parseInt(engMatch[1]);
+        }
+
+        // Try from URL slug (e.g. "الموسم-الرابع" in the path)
+        if (!seasonNum && link) {
+            const urlDecoded = decodeURIComponent(link);
+            const urlMatch = urlDecoded.match(/الموسم[- ](\S+)/);
+            if (urlMatch) {
+                const cleaned = urlMatch[1].replace(/-/g, '');
+                seasonNum = arabicOrdinals[cleaned] || parseInt(cleaned) || null;
+            }
+        }
+
+        return seasonNum;
+    }
+
+    // Helper: Build display title with season for TV series items
+    function buildDisplayTitle(item) {
+        let title = cleanTitle(item.title);
+        if (classifyItemType(item) === 'series') {
+            const season = extractSeason(item.title, item.link);
+            if (season) {
+                title += ` S${season}`;
+            }
+        }
+        return title;
+    }
+
     // Initialize Quick Discover Grid
     function initQuickTrending() {
         sectionTitle.textContent = "Trending Discoveries";
@@ -282,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const posterUrl = item.img || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80';
             const sourceName = item.source || 'WeCima';
             const sourceColor = sourceName === 'Akwam' ? 'rgba(59, 130, 246, 0.85)' : 'rgba(234, 179, 8, 0.85)';
-            const simplifiedTitle = cleanTitle(item.title);
+            const simplifiedTitle = buildDisplayTitle(item);
 
             card.innerHTML = `
                 <div class="trending-poster-wrapper">
@@ -321,39 +363,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await res.json();
             
             loader.classList.add('hidden');
-            let simplifiedTitle = cleanTitle(item.title);
-
-            // For TV series, extract season info from raw title or URL and append it
-            if (classifyItemType(item) === 'series') {
-                const arabicOrdinals = { 'الاول': 1, 'الأول': 1, 'الاولى': 1, 'الثاني': 2, 'الثانى': 2, 'الثانية': 2, 'الثالث': 3, 'الثالثة': 3, 'الرابع': 4, 'الرابعة': 4, 'الخامس': 5, 'الخامسة': 5, 'السادس': 6, 'السادسة': 6, 'السابع': 7, 'السابعة': 7, 'الثامن': 8, 'الثامنة': 8, 'التاسع': 9, 'التاسعة': 9, 'العاشر': 10, 'العاشرة': 10 };
-                let seasonNum = null;
-
-                // Try extracting from title text (Arabic ordinals)
-                const seasonMatch = item.title.match(/(?:الموسم|موسم)\s+(\S+)/);
-                if (seasonMatch) {
-                    seasonNum = arabicOrdinals[seasonMatch[1]] || parseInt(seasonMatch[1]) || null;
-                }
-
-                // Try English "Season X" pattern
-                if (!seasonNum) {
-                    const engMatch = item.title.match(/Season\s*(\d+)/i);
-                    if (engMatch) seasonNum = parseInt(engMatch[1]);
-                }
-
-                // Try extracting from URL path (e.g. "الموسم-الرابع" in URL slug)
-                if (!seasonNum && item.link) {
-                    const urlDecoded = decodeURIComponent(item.link);
-                    const urlSeasonMatch = urlDecoded.match(/الموسم[- ](\S+)/);
-                    if (urlSeasonMatch) {
-                        const cleaned = urlSeasonMatch[1].replace(/-/g, '');
-                        seasonNum = arabicOrdinals[cleaned] || parseInt(cleaned) || null;
-                    }
-                }
-
-                if (seasonNum) {
-                    simplifiedTitle += ` - Season ${seasonNum}`;
-                }
-            }
+            let simplifiedTitle = buildDisplayTitle(item);
 
             activeMovieTitle = simplifiedTitle;
 
