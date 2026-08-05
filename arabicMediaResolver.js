@@ -1,5 +1,8 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const https = require('https');
+
+const sslAgent = new https.Agent({ rejectUnauthorized: false });
 
 // Configured Base URLs and mirrors for the 6 target sites
 const SITE_CONFIGS = {
@@ -57,7 +60,7 @@ const BROWSER_HEADERS = {
   'Upgrade-Insecure-Requests': '1'
 };
 
-// Helper: Make HTTP request with mirror failovers
+// Helper: Make HTTP request with mirror failovers & SSL agent
 async function fetchHtml(url, mirrors = []) {
   const urlsToTry = [url, ...mirrors.map(m => url.replace(/^https?:\/\/[^\/]+/, m))];
   
@@ -65,13 +68,27 @@ async function fetchHtml(url, mirrors = []) {
     try {
       const response = await axios.get(targetUrl, {
         headers: BROWSER_HEADERS,
-        timeout: 8000
+        httpsAgent: sslAgent,
+        timeout: 8000,
+        maxRedirects: 5
       });
-      if (response.status === 200 && response.data) {
+      if (response.data && (typeof response.data === 'string')) {
         return response.data;
       }
     } catch (error) {
-      console.error(`[ArabicResolver] Mirror failed (${targetUrl}):`, error.message);
+      console.error(`[ArabicResolver] Axios mirror failed (${targetUrl}):`, error.message);
+      try {
+        const fetchRes = await fetch(targetUrl, {
+          headers: BROWSER_HEADERS,
+          redirect: 'follow'
+        });
+        if (fetchRes.ok) {
+          const htmlText = await fetchRes.text();
+          if (htmlText) return htmlText;
+        }
+      } catch (fetchErr) {
+        console.error(`[ArabicResolver] Native fetch mirror failed (${targetUrl}):`, fetchErr.message);
+      }
     }
   }
   return null;
@@ -319,12 +336,38 @@ async function searchPrestige(query) {
   return results;
 }
 
+// Common title translation map for popular movies/series to maximize Arabic site matches
+const TITLE_ALIASES = {
+  'inception': 'انسبشن',
+  'interstellar': 'انترستيلار',
+  'avatar': 'افاتار',
+  'batman': 'باتمان',
+  'spiderman': 'سبايدرمان',
+  'spider-man': 'سبايدرمان',
+  'game of thrones': 'صراع العروش',
+  'house of the dragon': 'آل التنين',
+  'breaking bad': 'اختلال ضال',
+  'prison break': 'بريزون بريك',
+  'peaky blinders': 'بيكي بلايندرز'
+};
+
 // Helper: Check relevance of result title to query words
 function isRelevantTitle(title, query) {
   if (!query || !query.trim()) return true;
-  const qWords = query.toLowerCase().trim().split(/\s+/).filter(w => w.length > 1);
+  const lowerTitle = (title || '').toLowerCase();
+  const lowerQuery = query.toLowerCase().trim();
+
+  // Exact or direct substring match
+  if (lowerTitle.includes(lowerQuery)) return true;
+
+  // Check alias match
+  const alias = TITLE_ALIASES[lowerQuery];
+  if (alias && lowerTitle.includes(alias)) return true;
+
+  // Word level check (any word > 2 chars)
+  const qWords = lowerQuery.split(/\s+/).filter(w => w.length > 2);
   if (qWords.length === 0) return true;
-  const lowerTitle = title.toLowerCase();
+
   return qWords.some(w => lowerTitle.includes(w));
 }
 
@@ -334,23 +377,33 @@ function isRelevantTitle(title, query) {
 async function searchAllSites(query) {
   console.log(`[ArabicResolver] Searching all sites for: "${query}"`);
   
-  const [topcinema, wecima, arabseed, movizland, qfilm, prestige] = await Promise.allSettled([
-    searchTopCinema(query),
-    searchWeCima(query),
-    searchArabSeed(query),
-    searchMovizland(query),
-    searchQFilm(query),
-    searchPrestige(query)
-  ]);
+  const queriesToTry = [query];
+  const alias = TITLE_ALIASES[query.toLowerCase().trim()];
+  if (alias) queriesToTry.push(alias);
 
-  const combined = [
-    ...(topcinema.status === 'fulfilled' ? topcinema.value : []),
-    ...(wecima.status === 'fulfilled' ? wecima.value : []),
-    ...(arabseed.status === 'fulfilled' ? arabseed.value : []),
-    ...(movizland.status === 'fulfilled' ? movizland.value : []),
-    ...(qfilm.status === 'fulfilled' ? qfilm.value : []),
-    ...(prestige.status === 'fulfilled' ? prestige.value : [])
-  ];
+  let combined = [];
+
+  for (const q of queriesToTry) {
+    const [topcinema, wecima, arabseed, movizland, qfilm, prestige] = await Promise.allSettled([
+      searchTopCinema(q),
+      searchWeCima(q),
+      searchArabSeed(q),
+      searchMovizland(q),
+      searchQFilm(q),
+      searchPrestige(q)
+    ]);
+
+    combined.push(
+      ...(topcinema.status === 'fulfilled' ? topcinema.value : []),
+      ...(wecima.status === 'fulfilled' ? wecima.value : []),
+      ...(arabseed.status === 'fulfilled' ? arabseed.value : []),
+      ...(movizland.status === 'fulfilled' ? movizland.value : []),
+      ...(qfilm.status === 'fulfilled' ? qfilm.value : []),
+      ...(prestige.status === 'fulfilled' ? prestige.value : [])
+    );
+    
+    if (combined.length > 0) break;
+  }
 
   // Filter out irrelevant sidebar items and deduplicate by URL
   const seenLinks = new Set();
