@@ -671,7 +671,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Download Movie Button Action - Automatic Direct File Download to Device
+    // Download Movie Button Action - Direct Stream File Download
     downloadNowBtn.addEventListener('click', async () => {
         if (!selectedDownloadOption) return;
 
@@ -687,24 +687,56 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadNowBtn.disabled = true;
         downloadProgress.classList.remove('hidden');
         downloadProgress.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        updateProgressUI(10, 'Preparing direct file download to your device...');
+        updateProgressUI(15, 'Connecting to stream server and resolving video file...');
 
         const safeFilename = `${movieTitleText.replace(/[\\/:*?"<>|]/g, '_')}.mp4`;
 
-        // Direct File Download Trigger
-        const saveLink = document.createElement('a');
-        saveLink.href = videoUrl;
-        saveLink.download = safeFilename;
-        saveLink.target = '_blank';
-        saveLink.rel = 'noopener';
-        document.body.appendChild(saveLink);
+        try {
+            const response = await fetch('/api/movies/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    downloadUrl: videoUrl,
+                    subtitleLang: subtitleLang,
+                    title: movieTitleText
+                })
+            });
 
-        setTimeout(() => {
+            if (response.ok) {
+                updateProgressUI(60, 'Streaming video track directly to your device...');
+                const blob = await response.blob();
+                const blobUrl = window.URL.createObjectURL(blob);
+                const saveLink = document.createElement('a');
+                saveLink.href = blobUrl;
+                saveLink.download = safeFilename;
+                document.body.appendChild(saveLink);
+                saveLink.click();
+                saveLink.remove();
+                window.URL.revokeObjectURL(blobUrl);
+                updateProgressUI(100, 'Direct file download complete! Saved to your Downloads folder.');
+            } else {
+                // Fallback: Direct attachment download without target _blank
+                const saveLink = document.createElement('a');
+                saveLink.href = videoUrl;
+                saveLink.download = safeFilename;
+                document.body.appendChild(saveLink);
+                saveLink.click();
+                saveLink.remove();
+                updateProgressUI(100, 'Direct file download initiated in browser!');
+            }
+        } catch (err) {
+            console.error(err);
+            // Fallback: Direct attachment download without target _blank
+            const saveLink = document.createElement('a');
+            saveLink.href = videoUrl;
+            saveLink.download = safeFilename;
+            document.body.appendChild(saveLink);
             saveLink.click();
             saveLink.remove();
-            updateProgressUI(100, 'Direct file download started! File is saving to your Downloads folder.');
+            updateProgressUI(100, 'Direct file download initiated!');
+        } finally {
             downloadNowBtn.disabled = false;
-        }, 500);
+        }
     });
 
     // Start with quickdiscover grid
