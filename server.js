@@ -1237,6 +1237,76 @@ app.post('/api/arabic/resolve', async (req, res) => {
   }
 });
 
+// Extract direct video URL from Arabic episode page using yt-dlp
+app.post('/api/arabic/extract', async (req, res) => {
+  const { url, title } = req.body;
+  if (!url) return res.status(400).json({ error: 'URL is required' });
+
+  try {
+    const ytDlpBinary = await ensureYtDlp();
+
+    // Use yt-dlp --dump-json to extract available formats without downloading
+    const args = [
+      '--no-warnings',
+      '--no-cache-dir',
+      '-J',
+      '--no-playlist',
+      '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      url
+    ];
+
+    console.log(`Extracting Arabic video URL with yt-dlp: ${url}`);
+
+    execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 20, timeout: 30000 }, (error, stdout, stderr) => {
+      if (error) {
+        console.error('yt-dlp Arabic extract failed:', error.message);
+        return res.status(500).json({ error: 'Could not extract video URL', detail: error.message });
+      }
+
+      try {
+        const data = JSON.parse(stdout);
+        const formats = (data.formats || []).filter(f => f.url && (f.vcodec !== 'none' || f.ext === 'mp4'));
+
+        // Build quality options sorted best → worst
+        const seen = new Set();
+        const downloads = [];
+
+        // Best combined video+audio first
+        const best = formats.filter(f => f.vcodec !== 'none' && f.acodec !== 'none').sort((a, b) => (b.height || 0) - (a.height || 0));
+        for (const f of best) {
+          const label = f.height ? `${f.height}p` : (f.format_note || f.format_id || 'HD');
+          if (seen.has(label)) continue;
+          seen.add(label);
+          downloads.push({
+            quality: label,
+            url: f.url,
+            host: new URL(f.url).hostname,
+            size: f.filesize ? `${(f.filesize / 1024 / 1024).toFixed(1)} MB` : '—'
+          });
+          if (downloads.length >= 5) break;
+        }
+
+        // If no combined formats, add best available
+        if (downloads.length === 0 && data.url) {
+          downloads.push({
+            quality: 'Best Quality',
+            url: data.url,
+            host: new URL(data.url).hostname,
+            size: '—'
+          });
+        }
+
+        return res.json({ downloads, title: data.title || title });
+      } catch (parseErr) {
+        return res.status(500).json({ error: 'Failed to parse yt-dlp output' });
+      }
+    });
+  } catch (err) {
+    console.error('Arabic extract error:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Route: OpenSubtitles Search
 app.post('/api/subtitles/search', async (req, res) => {
   const { imdbId } = req.body;

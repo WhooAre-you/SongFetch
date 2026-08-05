@@ -569,33 +569,22 @@ document.addEventListener('DOMContentLoaded', () => {
             );
 
             if (isArabicEpisode) {
-                // Route Arabic episode pages through arabic resolver
-                const res = await fetch('/api/arabic/resolve', {
+                // Use yt-dlp to extract the direct video download URL
+                qualitiesList.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#a78bfa;">⏳ Extracting video stream with yt-dlp...</td></tr>`;
+
+                const res = await fetch('/api/arabic/extract', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ url: epUrl, title: epTitle, source: 'Prestige' })
+                    body: JSON.stringify({ url: epUrl, title: epTitle })
                 });
-                if (!res.ok) throw new Error();
-                data = await res.json();
 
-                // Filter scraped links to keep ONLY actual video/CDN file hosts.
-                // Prestige pages contain many internal navigation links (index.php,
-                // watch.php, series1.php) that are NOT video files — discard them.
-                const VIDEO_HOSTS = [
-                    '.mp4', '.m3u8', '.mkv', '.avi', '.webm',
-                    'vidtube', 'updown', 'bowfile', 'mdiaload', 'gofile',
-                    'mediafire', 'streamtape', 'dood', 'filemoon',
-                    'embed.php', 'player.', 'cdn.', 'stream'
-                ];
-                if (data.downloads && data.downloads.length > 0) {
-                    data.downloads = data.downloads.filter(d =>
-                        d.url && VIDEO_HOSTS.some(h => d.url.includes(h))
-                    );
+                if (res.ok) {
+                    data = await res.json();
+                } else {
+                    data = { downloads: [] };
                 }
 
-                // If still no real video links found (Prestige uses BiBplayer / JS-loaded
-                // streams that can't be resolved server-side), offer the embed player page
-                // so the user can at least watch the episode in-browser.
+                // yt-dlp couldn't extract → fall back to embed player page
                 if (!data.downloads || data.downloads.length === 0) {
                     const vidMatch = epUrl.match(/vid=([a-z0-9]+)/i);
                     const embedUrl = vidMatch
