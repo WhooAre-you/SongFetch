@@ -55,6 +55,25 @@ async function fetchHtml(url) {
   }
 }
 
+// Helper: Extract poster URL reliably from img tag or background style
+function extractPoster($, el) {
+  const imgEl = $(el).find('img, .image, .poster, .thumb, [style*="background"]').first();
+  let src = imgEl.attr('data-src') || 
+            imgEl.attr('data-lazy-src') || 
+            imgEl.attr('data-bg') || 
+            imgEl.attr('data-lazy-style') || 
+            imgEl.attr('src') || '';
+
+  if (!src) {
+    const style = imgEl.attr('style') || $(el).find('[style*="background"]').attr('style') || $(el).attr('style') || '';
+    const match = style.match(/url\(['"]?(.*?)['"]?\)/i);
+    if (match) src = match[1];
+  }
+
+  if (src.startsWith('//')) src = 'https:' + src;
+  return src;
+}
+
 // ----------------------------------------------------
 // Scraper: TopCinema (topcinemaa.cam)
 // ----------------------------------------------------
@@ -66,14 +85,13 @@ async function searchTopCinema(query) {
   const $ = cheerio.load(html);
   const results = [];
   
-  $('.BlockItem, .movie-item, .entry-box').each((_, el) => {
+  $('.Grid--TopCinemaPosts .GridItem, .movie-item, .BlockItem').each((_, el) => {
     const linkEl = $(el).find('a').first();
     const titleEl = $(el).find('.title, .entry-title, h3, h2').first();
-    const imgEl = $(el).find('img').first();
     
     const href = linkEl.attr('href');
     const title = titleEl.text().trim() || linkEl.attr('title') || '';
-    let poster = imgEl.attr('data-src') || imgEl.attr('src') || '';
+    const poster = extractPoster($, el);
     
     if (href && title) {
       results.push({
@@ -104,14 +122,10 @@ async function searchWeCima(query) {
   $('.Grid--WecimaPosts .GridItem, .Thumb--GridItem').each((_, el) => {
     const linkEl = $(el).find('a').first();
     const titleEl = $(el).find('.title, strong').first();
-    const imgEl = $(el).find('.image, img').first();
     
     const href = linkEl.attr('href');
     const title = titleEl.text().trim() || linkEl.attr('title') || '';
-    let poster = imgEl.attr('data-bg') || imgEl.attr('src') || imgEl.css('background-image') || '';
-    if (poster && poster.includes('url(')) {
-      poster = poster.replace(/url\(['"]?/, '').replace(/['"]?\)/, '');
-    }
+    const poster = extractPoster($, el);
     
     if (href && title) {
       results.push({
@@ -142,11 +156,10 @@ async function searchArabSeed(query) {
   $('.MovieBlock, .BlockItem, .MovieBox').each((_, el) => {
     const linkEl = $(el).find('a').first();
     const titleEl = $(el).find('.Title, h4, h3').first();
-    const imgEl = $(el).find('img').first();
     
     const href = linkEl.attr('href');
     const title = titleEl.text().trim() || linkEl.attr('title') || '';
-    const poster = imgEl.attr('data-src') || imgEl.attr('src') || '';
+    const poster = extractPoster($, el);
     
     if (href && title) {
       results.push({
@@ -177,11 +190,10 @@ async function searchMovizland(query) {
   $('.BlockItem, .figure-box, .moviz-item').each((_, el) => {
     const linkEl = $(el).find('a').first();
     const titleEl = $(el).find('.title, h2, h3').first();
-    const imgEl = $(el).find('img').first();
     
     const href = linkEl.attr('href');
     const title = titleEl.text().trim() || linkEl.attr('title') || '';
-    const poster = imgEl.attr('data-src') || imgEl.attr('src') || '';
+    const poster = extractPoster($, el);
     
     if (href && title) {
       results.push({
@@ -212,11 +224,10 @@ async function searchQFilm(query) {
   $('.movie-card, .entry-title, .box-item').each((_, el) => {
     const linkEl = $(el).find('a').first();
     const titleEl = $(el).find('.title, h3, h2').first();
-    const imgEl = $(el).find('img').first();
     
     const href = linkEl.attr('href');
     const title = titleEl.text().trim() || linkEl.attr('title') || '';
-    const poster = imgEl.attr('data-src') || imgEl.attr('src') || '';
+    const poster = extractPoster($, el);
     
     if (href && title) {
       results.push({
@@ -247,11 +258,10 @@ async function searchPrestige(query) {
   $('.post-item, .entry-title, .video-box').each((_, el) => {
     const linkEl = $(el).find('a').first();
     const titleEl = $(el).find('.title, h3, h2').first();
-    const imgEl = $(el).find('img').first();
     
     const href = linkEl.attr('href');
     const title = titleEl.text().trim() || linkEl.attr('title') || '';
-    const poster = imgEl.attr('data-src') || imgEl.attr('src') || '';
+    const poster = extractPoster($, el);
     
     if (href && title) {
       results.push({
@@ -266,6 +276,15 @@ async function searchPrestige(query) {
   });
   
   return results;
+}
+
+// Helper: Check relevance of result title to query words
+function isRelevantTitle(title, query) {
+  if (!query || !query.trim()) return true;
+  const qWords = query.toLowerCase().trim().split(/\s+/).filter(w => w.length > 1);
+  if (qWords.length === 0) return true;
+  const lowerTitle = title.toLowerCase();
+  return qWords.some(w => lowerTitle.includes(w));
 }
 
 // ----------------------------------------------------
@@ -292,7 +311,15 @@ async function searchAllSites(query) {
     ...(prestige.status === 'fulfilled' ? prestige.value : [])
   ];
 
-  return combined;
+  // Filter out irrelevant sidebar items and deduplicate by URL
+  const seenLinks = new Set();
+  const filtered = combined.filter(item => {
+    if (!item.id || seenLinks.has(item.id)) return false;
+    seenLinks.add(item.id);
+    return isRelevantTitle(item.title, query);
+  });
+
+  return filtered;
 }
 
 // Safe URL helper to handle relative and dynamic links without throwing exceptions

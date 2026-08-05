@@ -357,15 +357,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const card = document.createElement('div');
             card.className = 'trending-card';
             
-            // Set default poster placeholder if empty
-            const posterUrl = item.img || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80';
+            // Set default poster placeholder if empty or relative
+            let posterUrl = item.img;
+            if (!posterUrl || typeof posterUrl !== 'string' || posterUrl.trim() === '') {
+                posterUrl = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80';
+            } else if (posterUrl.startsWith('//')) {
+                posterUrl = 'https:' + posterUrl;
+            }
+            
             const sourceName = item.source || 'WeFeed';
             const sourceColor = 'rgba(147, 51, 234, 0.85)';
             const simplifiedTitle = buildDisplayTitle(item);
 
             card.innerHTML = `
                 <div class="trending-poster-wrapper">
-                    <img src="${posterUrl}" alt="${simplifiedTitle}">
+                    <img src="${posterUrl}" alt="${simplifiedTitle}" onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80';">
                     <span class="source-badge" style="background: ${sourceColor};">${sourceName}</span>
                 </div>
                 <div class="trending-info">
