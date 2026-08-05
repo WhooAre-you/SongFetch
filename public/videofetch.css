@@ -218,7 +218,7 @@
 }
 
 /* Responsive adjustments */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
     .video-card {
         flex-direction: column;
         align-items: center;
@@ -227,14 +227,14 @@
     
     .video-thumbnail-container {
         width: 100%;
-        max-width: 320px;
+        max-width: 100%;
     }
     
     .quality-selector-container {
-        align-items: center;
+        align-items: stretch;
     }
     
     .select-wrapper {
-        max-width: 320px;
+        max-width: 100%;
     }
 }
