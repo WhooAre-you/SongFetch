@@ -815,211 +815,123 @@ app.get('/moviefetch', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'moviefetch.html'));
 });
 
-// Helper: Download subtitle file from ZIP archive keylessly
-async function downloadSubtitle(zipUrl, outputSrtPath) {
+// Helper: Download subtitle file directly from URL (direct SRT or ZIP archive)
+async function downloadDirectSubtitle(url, outputSrtPath) {
   try {
     const response = await axios({
-      url: zipUrl,
+      url,
       method: 'GET',
       responseType: 'arraybuffer',
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    const zip = new AdmZip(response.data);
-    const zipEntries = zip.getEntries();
-    for (const entry of zipEntries) {
-      if (entry.entryName.endsWith('.srt')) {
-        fs.writeFileSync(outputSrtPath, entry.getData());
-        return true;
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Origin': 'https://videodownloader.site',
+        'Referer': 'https://videodownloader.site/'
       }
+    });
+    
+    // Check if the content is a ZIP file
+    const isZip = url.includes('.zip') || response.headers['content-type']?.includes('zip');
+    if (isZip) {
+      const zip = new AdmZip(response.data);
+      const zipEntries = zip.getEntries();
+      for (const entry of zipEntries) {
+        if (entry.entryName.endsWith('.srt')) {
+          fs.writeFileSync(outputSrtPath, entry.getData());
+          return true;
+        }
+      }
+    } else {
+      // Direct SRT download
+      fs.writeFileSync(outputSrtPath, response.data);
+      return true;
     }
   } catch (err) {
-    console.error('Subtitle unzip failed:', err.message);
+    console.error('Subtitle download failed:', err.message);
   }
   return false;
 }
 
-// Helper: Fetch direct subtitles zip URLs from yts-subs.com
-async function fetchSubtitlesFromYts(title) {
-  try {
-    const cleanTitle = title.replace(/[\\/:*?"<>|()\-]/g, ' ').replace(/\s+/g, ' ').trim();
-    console.log(`Subtitles search for cleaned title: "${cleanTitle}"`);
-    
-    const searchUrl = `https://yts-subs.com/search/${encodeURIComponent(cleanTitle)}`;
-    const response = await axios.get(searchUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    const $ = cheerio.load(response.data);
-    let movieHref = '';
-    
-    $('a').each((i, el) => {
-      const href = $(el).attr('href');
-      if (href && href.includes('/movie-imdb/')) {
-        movieHref = href;
-        return false; // break
-      }
-    });
-    
-    if (!movieHref) return null;
-    
-    const movieUrl = `https://yts-subs.com${movieHref}`;
-    console.log(`Subtitles movie page found: ${movieUrl}`);
-    const movieRes = await axios.get(movieUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    const $$ = cheerio.load(movieRes.data);
-    
-    let arabicSubUrl = '';
-    let englishSubUrl = '';
-    
-    $$('tr').each((i, el) => {
-      const lang = $$(el).find('.sub-lang').text().trim().toLowerCase();
-      const href = $$(el).find('a').attr('href');
-      if (lang === 'arabic' && !arabicSubUrl) {
-        arabicSubUrl = href;
-      }
-      if (lang === 'english' && !englishSubUrl) {
-        englishSubUrl = href;
-      }
-      if (arabicSubUrl && englishSubUrl) return false; // break
-    });
-    
-    const results = {};
-    if (arabicSubUrl) {
-      results.arabic = await getDirectZipUrl(`https://yts-subs.com${arabicSubUrl}`);
-    }
-    if (englishSubUrl) {
-      results.english = await getDirectZipUrl(`https://yts-subs.com${englishSubUrl}`);
-    }
-    return results;
-  } catch (err) {
-    console.error('Failed to fetch subtitles from YTS:', err.message);
-    return null;
+
+// Helper: Get cached or fresh WeFeed guest session token
+let cachedWeFeedToken = null;
+let weFeedTokenExpiry = 0;
+
+async function getWeFeedToken() {
+  const now = Math.floor(Date.now() / 1000);
+  if (cachedWeFeedToken && weFeedTokenExpiry > now + 3600) {
+    return cachedWeFeedToken;
   }
+  
+  console.log('Fetching new WeFeed guest token...');
+  const res = await axios.get('https://api.seocloud.biz/wefeed-seo-bff/vip/sku-list', {
+    headers: {
+      'Accept': 'application/json',
+      'x-request-lang': 'en',
+      'X-Client-Info': JSON.stringify({ timezone: 'Africa/Cairo' }),
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'Origin': 'https://videodownloader.site',
+      'Referer': 'https://videodownloader.site/'
+    }
+  });
+  
+  const xUserStr = res.headers['x-user'];
+  if (!xUserStr) throw new Error('x-user header missing in token response');
+  const xUserData = JSON.parse(xUserStr);
+  cachedWeFeedToken = xUserData.token;
+  
+  try {
+    const payload = JSON.parse(Buffer.from(cachedWeFeedToken.split('.')[1], 'base64').toString('utf8'));
+    weFeedTokenExpiry = payload.exp || (now + 86400);
+  } catch (e) {
+    weFeedTokenExpiry = now + 86400;
+  }
+  return cachedWeFeedToken;
 }
 
-// Helper: Decode YTS subtitles download page button data-link
-async function getDirectZipUrl(subPageUrl) {
-  try {
-    const res = await axios.get(subPageUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
-    });
-    const $ = cheerio.load(res.data);
-    const dataLink = $('.download-subtitle').attr('data-link') || $('#btn-download-subtitle').attr('data-link');
-    if (dataLink) {
-      return Buffer.from(dataLink, 'base64').toString('utf8');
-    }
-  } catch (err) {
-    console.error('Failed to get direct zip url:', err.message);
-  }
-  return null;
-}
-
-// Route: MovieFetch search via WeCima and Akwam
+// Route: MovieFetch search via WeFeed API
 app.get('/api/movies/search', async (req, res) => {
   const { q } = req.query;
   if (!q) {
     return res.status(400).json({ error: 'Query parameter "q" is required' });
   }
 
-  const results = [];
-
-  // 1. Scraping WeCima
   try {
-    const searchUrl = `https://wecima.cx/search/${encodeURIComponent(q)}/`;
-    console.log(`Scraping WeCima search for: "${q}" via ${searchUrl}`);
-    
-    const response = await axios.get(searchUrl, {
+    const token = await getWeFeedToken();
+    const searchRes = await axios.post('https://h5-api.aoneroom.com/wefeed-h5api-bff/subject/search', {
+      keyword: q,
+      page: 1,
+      perPage: 30
+    }, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Source': 'downloader',
+        'X-Site-Domain': 'videodownloader.site',
+        'Authorization': `Bearer ${token}`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Origin': 'https://videodownloader.site',
+        'Referer': 'https://videodownloader.site/'
       }
     });
 
-    const $ = cheerio.load(response.data);
-
-    $('.Grid--WecimaPosts .GridItem').each((i, el) => {
-      const aEl = $(el).find('.Thumb--GridItem a');
-      let title = aEl.attr('title') || $(el).find('[itemprop="name"]').text().trim() || '';
-      const link = aEl.attr('href') || $(el).find('a').first().attr('href');
-      
-      // If the title is too long (description leaked in), extract from URL slug instead
-      if (title.length > 120 && link) {
-        try {
-          const slug = decodeURIComponent(link).split('/').pop().replace(/-/g, ' ');
-          if (slug.length > 3) title = slug;
-        } catch (e) {}
-      }
-      
-      // Truncate to prevent description contamination
-      if (title.length > 120) {
-        title = title.substring(0, 120).trim();
-      }
-      
-      let img = $(el).find('.BG--GridItem').attr('data-src') || '';
-      if (!img) {
-        const bgStyle = $(el).find('.BG--GridItem').attr('style');
-        if (bgStyle) {
-          const match = bgStyle.match(/url\(['"]?(.*?)['"]?\)/);
-          if (match) img = match[1];
-        }
-      }
-      if (!img) {
-        img = $(el).find('img').attr('src') || '';
-      }
-      if (img && img.startsWith('//')) {
-        img = 'https:' + img;
-      }
-
-      if (link && link.includes('/watch/')) {
-        results.push({ title, link, img, source: 'WeCima' });
-      }
+    const items = searchRes.data?.data?.items || [];
+    const results = items.map(item => {
+      // Map domain prefix to movie vs series
+      const prefix = item.subjectType === 2 ? 'series' : 'movie';
+      const link = `https://wefeed.site/${prefix}?id=${item.subjectId}&path=${item.detailPath}&title=${encodeURIComponent(item.title)}`;
+      return {
+        title: item.title,
+        link,
+        img: item.cover?.url || '',
+        source: 'WeFeed'
+      };
     });
+
+    res.json({ results });
   } catch (err) {
-    console.error('WeCima search failed:', err.message);
+    console.error('WeFeed search failed:', err.message);
+    res.status(500).json({ error: `Search failed: ${err.message}` });
   }
-
-  // 2. Scraping Akwam
-  try {
-    const searchUrl = `https://ak.sv/search?q=${encodeURIComponent(q)}`;
-    console.log(`Scraping Akwam search for: "${q}" via ${searchUrl}`);
-    
-    const response = await axios.get(searchUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-
-    const $ = cheerio.load(response.data);
-
-    $('.entry-box').each((i, el) => {
-      let title = '';
-      let link = '';
-      $(el).find('a').each((j, a) => {
-        const text = $(a).text().trim();
-        const href = $(a).attr('href');
-        if (href && !href.includes('javascript') && text && text !== 'مشاهدة' && text !== 'قائمتي') {
-          title = text;
-          link = href;
-        }
-      });
-      
-      if (!link) {
-        link = $(el).find('a').first().attr('href');
-      }
-
-      let img = $(el).find('img').attr('src') || $(el).find('img').attr('data-src') || '';
-      if (img && img.startsWith('//')) {
-        img = 'https:' + img;
-      }
-
-      if (link && (link.includes('/movie/') || link.includes('/series/'))) {
-        results.push({ title: title || 'Akwam Entry', link, img, source: 'Akwam' });
-      }
-    });
-  } catch (err) {
-    console.error('Akwam search failed:', err.message);
-  }
-
-  res.json({ results });
 });
 
 // Route: MovieFetch watch page details scraping (episodes or download options)
@@ -1030,152 +942,118 @@ app.post('/api/movies/info', async (req, res) => {
   }
 
   try {
-    // 1. Akwam Details Parser
-    if (url.includes('akwam') || url.includes('ak.sv')) {
-      console.log(`Scraping Akwam watch/series page: ${url}`);
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        }
-      });
-      const $ = cheerio.load(response.data);
-
-      // Check if TV series page (has episode links)
-      // Extract the series slug from the current URL to filter only this season's episodes
-      const urlSlug = url.replace(/.*\/series\/\d+\//, '').replace(/\/$/, '');
-      const episodes = [];
-      const seenEpUrls = new Set();
-      $('a').each((i, el) => {
-        const href = $(el).attr('href');
-        const text = $(el).text().trim().replace(/\s+/g, ' ');
-        if (href && href.includes('/episode/') && !seenEpUrls.has(href)) {
-          // Only include episodes that belong to the same series/season slug
-          if (!urlSlug || href.includes(urlSlug) || urlSlug.length < 3) {
-            seenEpUrls.add(href);
-            episodes.push({ text, link: href });
-          }
-        }
-      });
-
-      if (episodes.length > 0) {
-        return res.json({ type: 'series', episodes });
-      }
-
-      // Movie or Episode Page: Parse download landing links
-      const downloads = [];
-      const downloadLandingPages = [];
-
-      $('a').each((i, el) => {
-        const href = $(el).attr('href');
-        const text = $(el).text().trim().replace(/\s+/g, ' ');
-        if (href && href.includes('/download/')) {
-          const sizeMatch = text.match(/تحميل\s*(.*)/);
-          const size = sizeMatch ? sizeMatch[1].trim() : 'Unknown size';
-          downloadLandingPages.push({ landingUrl: href, size });
-        }
-      });
-
-      // Fetch each landing page to resolve direct links
-      for (const item of downloadLandingPages) {
-        try {
-          console.log(`Resolving direct link from Akwam landing page: ${item.landingUrl}`);
-          const landingRes = await axios.get(item.landingUrl, {
-            headers: { 'User-Agent': 'Mozilla/5.0' }
-          });
-          const $landing = cheerio.load(landingRes.data);
-
-          let directLink = '';
-          $landing('a').each((j, a) => {
-            const href = $landing(a).attr('href');
-            if (href && (href.includes('.mp4') || $landing(a).hasClass('btn-light') || $landing(a).text().includes('تحميل'))) {
-              directLink = href;
-              return false; // break
-            }
-          });
-
-          if (directLink) {
-            let quality = 'HD';
-            if (directLink.toLowerCase().includes('1080p')) quality = 'Full HD 1080p';
-            else if (directLink.toLowerCase().includes('720p')) quality = 'HD 720p';
-            else if (directLink.toLowerCase().includes('480p')) quality = 'SD 480p';
-            else if (directLink.toLowerCase().includes('bluray')) quality = 'BluRay';
-
-            downloads.push({
-              quality,
-              size: item.size,
-              link: directLink,
-              host: 'Akwam Direct Server'
-            });
-          }
-        } catch (e) {
-          console.error(`Failed to resolve Akwam link for ${item.landingUrl}:`, e.message);
-        }
-      }
-
-      return res.json({ type: 'movie', downloads });
-    }
-
-    // 2. WeCima Details Parser
-    console.log(`Scraping WeCima watch page: ${url}`);
-    const response = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-
-    const $ = cheerio.load(response.data);
+    const urlObj = new URL(url);
+    const params = new URLSearchParams(urlObj.search);
+    const id = params.get('id');
+    const pathVal = params.get('path');
+    const title = params.get('title') || 'Media';
     
-    // Check if it's a TV series (has episodes listed)
-    const episodes = [];
-    $('a').each((i, el) => {
-      const href = $(el).attr('href');
-      const text = $(el).text().trim().replace(/\s+/g, ' ');
-      if (href && href.includes('/watch/') && (text.includes('حلقة') || text.includes('الحلقة') || text.includes('Episode') || text.includes('موسم'))) {
-        episodes.push({ text, link: href });
+    const isSeries = urlObj.pathname.includes('/series');
+    const isDownload = urlObj.pathname.includes('/download');
+    
+    const token = await getWeFeedToken();
+    
+    // Action 1: If it's a TV series root, fetch seasons and return episode list
+    if (isSeries) {
+      console.log(`Fetching WeFeed TV details for: ${title} (${pathVal})`);
+      const detailRes = await axios.get(`https://h5-api.aoneroom.com/wefeed-h5api-bff/detail?detailPath=${encodeURIComponent(pathVal)}`, {
+        headers: {
+          'Accept': 'application/json',
+          'X-Source': 'downloader',
+          'X-Site-Domain': 'videodownloader.site',
+          'Authorization': `Bearer ${token}`,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Origin': 'https://videodownloader.site',
+          'Referer': 'https://videodownloader.site/'
+        }
+      });
+      
+      const seasonsData = detailRes.data?.data?.resource?.seasons || [];
+      const episodes = [];
+      
+      for (const season of seasonsData) {
+        const seNum = season.se;
+        const maxEp = season.maxEp || 0;
+        for (let epNum = 1; epNum <= maxEp; epNum++) {
+          episodes.push({
+            text: `Season ${seNum} Episode ${epNum}`,
+            link: `https://wefeed.site/download?id=${id}&se=${seNum}&ep=${epNum}&path=${pathVal}&title=${encodeURIComponent(title)}`
+          });
+        }
       }
-    });
-
-    if (episodes.length > 0) {
-      // Reverse order so it lists from Episode 1 upwards
-      episodes.reverse();
+      
       return res.json({ type: 'series', episodes });
     }
-
-    // It's a Movie: parse download list
-    const downloads = [];
-    $('.Download--Wecima--Single li.download-item').each((i, el) => {
-      const dataHref = $(el).attr('data-href');
-      if (dataHref) {
-        try {
-          const cleaned = 'aHR0c' + dataHref.replace(/\+/g, '');
-          const decoded = Buffer.from(cleaned, 'base64').toString('utf8');
-          
-          const resolution = $(el).find('.resolution').text().trim() || 'HD';
-          const size = $(el).find('.size').text().trim() || 'Unknown size';
-          const quality = $(el).find('.quality').text().trim() || 'WEB-DL';
-          
-          let host = 'Direct link';
-          try {
-            const urlObj = new URL(decoded);
-            host = urlObj.hostname.replace('www.', '');
-          } catch (e) {}
-
-          downloads.push({
-            quality: `${resolution} (${quality})`,
-            size,
-            link: decoded,
-            host
-          });
-        } catch (e) {
-          console.error('Failed to decode data-href:', dataHref, e.message);
-        }
+    
+    // Action 2: If it's a Movie or an Episode Download, fetch quality options and subtitles
+    let se = 0;
+    let ep = 0;
+    
+    if (isDownload) {
+      se = parseInt(params.get('se') || '0', 10);
+      ep = parseInt(params.get('ep') || '0', 10);
+    }
+    
+    console.log(`Fetching WeFeed download resources for subjectId: ${id}, se: ${se}, ep: ${ep}`);
+    const dlRes = await axios.get(`https://h5-api.aoneroom.com/wefeed-h5api-bff/subject/download?subjectId=${id}&se=${se}&ep=${ep}&detailPath=${encodeURIComponent(pathVal)}`, {
+      headers: {
+        'Accept': 'application/json',
+        'x-request-lang': 'en',
+        'X-Client-Info': JSON.stringify({ timezone: 'Africa/Cairo' }),
+        'X-Source': 'downloader',
+        'X-Site-Domain': 'videodownloader.site',
+        'Authorization': `Bearer ${token}`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Origin': 'https://videodownloader.site',
+        'Referer': 'https://videodownloader.site/'
       }
     });
-
-    res.json({ type: 'movie', downloads });
+    
+    const dlData = dlRes.data?.data || {};
+    const wefeedDownloads = dlData.downloads || [];
+    const wefeedCaptions = dlData.captions || [];
+    
+    // Filter only Arabic and English subtitles
+    const subtitles = wefeedCaptions
+      .filter(cap => cap.lan === 'ar' || cap.lan === 'en' || cap.lanName?.toLowerCase().includes('arabic') || cap.lanName?.toLowerCase().includes('english'))
+      .map(cap => ({
+        lan: cap.lan === 'ar' ? 'ar' : 'en',
+        url: cap.url
+      }));
+      
+    // Format download options
+    const downloads = wefeedDownloads.map(dl => {
+      // Human-readable size helper
+      let sizeStr = 'Unknown size';
+      if (dl.size) {
+        const sizeBytes = parseInt(dl.size, 10);
+        if (sizeBytes > 1024 * 1024 * 1024) {
+          sizeStr = `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+        } else if (sizeBytes > 1024 * 1024) {
+          sizeStr = `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+        } else {
+          sizeStr = `${(sizeBytes / 1024).toFixed(1)} KB`;
+        }
+      }
+      
+      // Pack video URL and captions array into a JSON payload so /api/movies/download can unpack them
+      const compositeLink = JSON.stringify({
+        videoUrl: dl.url,
+        captions: subtitles
+      });
+      
+      return {
+        quality: `${dl.resolution}p (${dl.codecName || 'h264'})`,
+        size: sizeStr,
+        link: compositeLink,
+        host: 'WeFeed CDN'
+      };
+    });
+    
+    return res.json({ type: 'movie', downloads });
   } catch (err) {
-    console.error('Movie info parsing failed:', err.message);
-    res.status(500).json({ error: `Movie watch details failed: ${err.message}` });
+    console.error('WeFeed info resolution failed:', err.message);
+    res.status(500).json({ error: `Details resolution failed: ${err.message}` });
   }
 });
 
@@ -1197,41 +1075,62 @@ app.post('/api/movies/download', async (req, res) => {
   const engSrtPath = path.join(jobTempDir, 'english.srt');
 
   try {
-    // 1. Resolve & download Subtitles
+    // 1. Parse composite download URL containing true video link and subtitles list
+    let actualVideoUrl = downloadUrl;
+    let captions = [];
+    try {
+      const parsed = JSON.parse(downloadUrl);
+      if (parsed.videoUrl) {
+        actualVideoUrl = parsed.videoUrl;
+        captions = parsed.captions || [];
+      }
+    } catch (e) {
+      // fallback to original if not a packed JSON string
+    }
+
+    // 2. Download subtitles directly from WeFeed CDN
     let araDownloaded = false;
     let engDownloaded = false;
     
     if (subtitleLang && subtitleLang !== 'none') {
-      console.log(`Resolving subtitles for: "${title}"`);
-      const subs = await fetchSubtitlesFromYts(title);
-      if (subs) {
-        if ((subtitleLang === 'ara' || subtitleLang === 'both') && subs.arabic) {
-          araDownloaded = await downloadSubtitle(subs.arabic, araSrtPath);
-          console.log('Arabic subtitle download status:', araDownloaded);
-        }
-        if ((subtitleLang === 'eng' || subtitleLang === 'both') && subs.english) {
-          engDownloaded = await downloadSubtitle(subs.english, engSrtPath);
-          console.log('English subtitle download status:', engDownloaded);
-        }
+      console.log('Resolving direct subtitles from WeFeed captions list...');
+      const arabicCap = captions.find(c => c.lan === 'ar');
+      const englishCap = captions.find(c => c.lan === 'en');
+      
+      if ((subtitleLang === 'ara' || subtitleLang === 'both') && arabicCap?.url) {
+        console.log(`Downloading Arabic subtitle direct from: ${arabicCap.url}`);
+        araDownloaded = await downloadDirectSubtitle(arabicCap.url, araSrtPath);
+        console.log('Arabic subtitle download status:', araDownloaded);
+      }
+      
+      if ((subtitleLang === 'eng' || subtitleLang === 'both') && englishCap?.url) {
+        console.log(`Downloading English subtitle direct from: ${englishCap.url}`);
+        engDownloaded = await downloadDirectSubtitle(englishCap.url, engSrtPath);
+        console.log('English subtitle download status:', engDownloaded);
       }
     }
 
-    // 2. Download the Movie
-    console.log(`Downloading movie stream from host: ${downloadUrl}`);
+    // 3. Download the Movie
+    console.log(`Downloading movie stream from: ${actualVideoUrl}`);
     let videoSuccess = false;
     
-    // Check if direct CDN MP4 link (like Akwam CDN downet.net)
-    const isDirectMp4 = downloadUrl.toLowerCase().includes('.mp4') || downloadUrl.includes('downet.net');
+    // Direct CDN downloads from hakunaymatata / aoneroom or standard mp4 links
+    const isDirectMp4 = actualVideoUrl.toLowerCase().includes('.mp4') || 
+                        actualVideoUrl.includes('hakunaymatata') || 
+                        actualVideoUrl.includes('aoneroom') || 
+                        actualVideoUrl.includes('downet.net');
     
     if (isDirectMp4) {
       try {
         console.log('Detected direct HTTP download link. Running direct Axios streaming download...');
         const downloadResponse = await axios({
-          url: downloadUrl,
+          url: actualVideoUrl,
           method: 'GET',
           responseType: 'stream',
           headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'Origin': 'https://videodownloader.site',
+            'Referer': 'https://videodownloader.site/'
           }
         });
 
@@ -1247,7 +1146,7 @@ app.post('/api/movies/download', async (req, res) => {
         console.warn('Direct HTTP download failed:', err.message);
       }
     } else {
-      // We will attempt to download using yt-dlp first
+      // yt-dlp fallback download
       try {
         const ytDlpBinary = await ensureYtDlp();
         const ffmpegDir = path.dirname(ffmpegPath);
@@ -1258,7 +1157,7 @@ app.post('/api/movies/download', async (req, res) => {
           '--ffmpeg-location', ffmpegDir,
           '-f', 'best',
           '-o', rawVideoPath,
-          downloadUrl
+          actualVideoUrl
         ];
         
         await new Promise((resolve, reject) => {
@@ -1273,8 +1172,7 @@ app.post('/api/movies/download', async (req, res) => {
       }
     }
 
-    // Fallback: If download failed, we generate a high-quality cinematic placeholder video using ffmpeg
-    // to simulate a valid file download rather than crashing!
+    // Fallback cinematic placeholder generator (if download fails)
     if (!videoSuccess) {
       console.log(`Using fallback cinematic placeholder generator for "${title}"...`);
       const ffmpegDir = path.dirname(ffmpegPath);
@@ -1287,9 +1185,9 @@ app.post('/api/movies/download', async (req, res) => {
       const genArgs = [
         '-y',
         '-f', 'lavfi',
-        '-i', 'color=c=black:s=1280x720:d=10', // 10 second HD video
+        '-i', 'color=c=black:s=1280x720:d=10',
         '-f', 'lavfi',
-        '-i', 'sine=frequency=440:duration=10', // 10 second audio
+        '-i', 'sine=frequency=440:duration=10',
         '-vf', filterStr,
         '-c:v', 'libx264',
         '-c:a', 'aac',
@@ -1309,7 +1207,7 @@ app.post('/api/movies/download', async (req, res) => {
       throw new Error('Failed to generate or download video.');
     }
 
-    // 3. Merge Subtitles
+    // 4. Merge Subtitles using FFmpeg
     console.log('Embedding subtitles using FFmpeg...');
     const ffmpegDir = path.dirname(ffmpegPath);
     const ffmpegBin = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
@@ -1327,10 +1225,10 @@ app.post('/api/movies/download', async (req, res) => {
       subtitleInputsCount++;
     }
 
-    mergeArgs.push('-c', 'copy'); // Copy video/audio codecs
+    mergeArgs.push('-c', 'copy');
     
     if (subtitleInputsCount > 0) {
-      mergeArgs.push('-c:s', 'mov_text'); // Embed subtitles as mov_text inside mp4
+      mergeArgs.push('-c:s', 'mov_text');
       
       if (araDownloaded && engDownloaded) {
         mergeArgs.push(
@@ -1363,7 +1261,7 @@ app.post('/api/movies/download', async (req, res) => {
 
     const sendFilePath = fs.existsSync(finalVideoPath) ? finalVideoPath : rawVideoPath;
 
-    // 4. Send the file
+    // 5. Stream compiled MP4 file back to browser
     const safeFilename = `${title}.mp4`.replace(/[\\/:*?"<>|]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
     res.setHeader('Content-Type', 'video/mp4');
@@ -1372,7 +1270,6 @@ app.post('/api/movies/download', async (req, res) => {
     fileStream.pipe(res);
 
     fileStream.on('end', () => {
-      // Clean up temp directory recursively
       fs.rm(jobTempDir, { recursive: true, force: true }, (err) => {
         if (err) console.error('Failed to clean up job directory:', err.message);
       });
@@ -1385,7 +1282,6 @@ app.post('/api/movies/download', async (req, res) => {
 
   } catch (err) {
     console.error('Movie download handler failed:', err.message);
-    // Cleanup on error
     fs.rm(jobTempDir, { recursive: true, force: true }, () => {});
     res.status(500).json({ error: err.message || 'An error occurred during movie download.' });
   }

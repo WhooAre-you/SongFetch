@@ -290,7 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
         progressStatus.textContent = status;
     }
 
-    // Search Trigger (queries search API with Akwam + WeCima)
+    // Search Trigger (queries search API with WeFeed CDN index)
     async function triggerSearch(query) {
         resetUI();
         loaderText.textContent = `Searching cinema archives for "${query}"...`;
@@ -342,8 +342,8 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Set default poster placeholder if empty
             const posterUrl = item.img || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80';
-            const sourceName = item.source || 'WeCima';
-            const sourceColor = sourceName === 'Akwam' ? 'rgba(59, 130, 246, 0.85)' : 'rgba(234, 179, 8, 0.85)';
+            const sourceName = item.source || 'WeFeed';
+            const sourceColor = 'rgba(147, 51, 234, 0.85)';
             const simplifiedTitle = buildDisplayTitle(item);
 
             card.innerHTML = `
@@ -353,7 +353,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
                 <div class="trending-info">
                     <h4>${simplifiedTitle}</h4>
-                    <p>${sourceName} Media Index</p>
+                    <p>${sourceName} Direct Index</p>
                 </div>
             `;
 
@@ -368,8 +368,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load watch details
     async function loadWatchDetails(item) {
         resetUI();
-        const sourceName = item.source || 'WeCima';
-        loaderText.textContent = `Resolving ${sourceName} source listings for "${item.title}"...`;
+        const sourceName = item.source || 'WeFeed';
+        loaderText.textContent = `Resolving ${sourceName} CDN mirrors for "${item.title}"...`;
         loader.classList.remove('hidden');
 
         try {
@@ -399,11 +399,11 @@ document.addEventListener('DOMContentLoaded', () => {
             movieYear.textContent = year;
 
             // Set default descriptions
-            movieDirector.textContent = `${sourceName} Provider`;
+            movieDirector.textContent = `${sourceName} CDN`;
             movieGenre.textContent = classifyItemType(item) === 'movie' ? 'Movie' : 'TV Show';
             movieTypeBadge.textContent = classifyItemType(item) === 'series' ? 'TV SERIES' : 'MOVIE';
-            movieRating.textContent = sourceName === 'Akwam' ? '★ 8.2' : '★ 7.8';
-            moviePlot.textContent = `Media sources scraped directly from ${sourceName}. Select your preferred resolution and download quality below to fetch the video file. Optional subtitles can be multiplexed directly into the final container.`;
+            movieRating.textContent = '★ 8.2';
+            moviePlot.textContent = `High-speed direct CDN streams served via ${sourceName}. Select your preferred resolution and download quality below to fetch the video file. Optional subtitles can be multiplexed directly into the final container.`;
 
             // Search metadata helpers to fill in premium English plot/genre details
             if (classifyItemType(item) === 'series') {
