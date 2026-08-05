@@ -1,6 +1,6 @@
 // ======================================================
 // arabicMediaResolver.js - Standalone Arabic Media Scraper
-// Handles 5 target sites: TopCinema, WeCima, Movizland, QFilm, Prestige (ArabSeed removed)
+// Handles 5 target sites: TopCinema, WeCima, Movizland, QFilm, Prestige
 // Zero external dependencies required (uses built-in fetch)
 // ======================================================
 
@@ -31,9 +31,9 @@ const SITE_CONFIGS = {
   },
   prestige: {
     name: 'Prestige',
-    baseUrl: 'https://brstej.com',
-    mirrors: ['https://brstej.com'],
-    searchPath: '/?s='
+    baseUrl: 'https://a.prstej.net',
+    mirrors: ['https://a.prstej.net', 'https://brstej.com'],
+    searchPath: '/search.php?keywords='
   }
 };
 
@@ -95,20 +95,11 @@ function extractCoreQuery(q) {
   return words.join(' ') || q.trim();
 }
 
+// Fast Direct-First HTTP Fetcher
 async function fetchHtml(url, mirrors = []) {
-  const proxy1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-  const proxy2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
-  
-  const candidates = [
-    url,
-    ...mirrors.filter(m => !url.startsWith(m)).map(m => url.replace(/^https?:\/\/[^\/]+/, m)),
-    proxy1,
-    proxy2
-  ];
-
   const fetchWithTimeout = async (targetUrl) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2500);
+    const timer = setTimeout(() => controller.abort(), 3500);
     try {
       const res = await fetch(targetUrl, {
         headers: BROWSER_HEADERS,
@@ -126,13 +117,22 @@ async function fetchHtml(url, mirrors = []) {
     return null;
   };
 
-  try {
-    const results = await Promise.all(candidates.slice(0, 3).map(fetchWithTimeout));
-    const valid = results.find(t => t && t.length > 300);
-    if (valid) return valid;
-  } catch (e) {}
+  // 1. Direct fetch first
+  let html = await fetchWithTimeout(url);
+  if (html) return html;
 
-  return null;
+  // 2. Try mirrors
+  for (const mirror of mirrors) {
+    const altUrl = url.replace(/^https?:\/\/[^\/]+/, mirror);
+    if (altUrl !== url) {
+      html = await fetchWithTimeout(altUrl);
+      if (html) return html;
+    }
+  }
+
+  // 3. Proxy fallback
+  const proxy1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+  return await fetchWithTimeout(proxy1);
 }
 
 // Resolve direct video file stream URL from hoster link (e.g. VidTube, UpDown, etc.)
@@ -317,20 +317,23 @@ async function searchQFilm(query) {
   return results;
 }
 
-// Prestige Scraper
+// Prestige Scraper (a.prstej.net/search.php?keywords=)
 async function searchPrestige(query) {
-  const url = `${SITE_CONFIGS.prestige.baseUrl}/?s=${encodeURIComponent(query)}`;
+  const url = `${SITE_CONFIGS.prestige.baseUrl}/search.php?keywords=${encodeURIComponent(query)}`;
   const html = await fetchHtml(url, SITE_CONFIGS.prestige.mirrors);
   if (!html) return [];
 
   const results = [];
-  const matches = [...html.matchAll(/<a [^>]*href="(https?:\/\/(?:brstej|prestige|prstej)\.[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const matches = [...html.matchAll(/<a [^>]*href="([^"]*watch\.php[^"]*|[^"]*series1\.php[^"]*|[^"]*video\.php[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi)];
   for (const m of matches) {
-    const href = m[1];
+    let href = m[1];
+    if (!href.startsWith('http')) {
+      href = `${SITE_CONFIGS.prestige.baseUrl}/${href.replace(/^\//, '')}`;
+    }
     const inner = m[2];
     const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i);
-    if (title && title.length > 3 && !href.includes('cat67.php') && !href.includes('main430')) {
+    if (title && title.length > 3) {
       results.push({
         id: href,
         title,
@@ -372,7 +375,7 @@ function calculateMatchScore(title, rawQuery) {
   return 10;
 }
 
-// Search 5 Target Sites Concurrently (ArabSeed removed)
+// Search 5 Target Sites Concurrently
 async function searchAllSites(query) {
   console.log(`[ArabicResolver] Searching all sites for: "${query}"`);
 
