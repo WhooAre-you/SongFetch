@@ -671,8 +671,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Download Movie Button Action - Native Browser Stream Download (0% RAM overhead, direct to Downloads folder)
-    downloadNowBtn.addEventListener('click', async () => {
+    // Download Movie Button Action - Direct Native Attachment Download
+    downloadNowBtn.addEventListener('click', () => {
         if (!selectedDownloadOption) return;
 
         const videoUrl = selectedDownloadOption.url || selectedDownloadOption.link || selectedDownloadOption.id;
@@ -687,31 +687,9 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadProgress.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         updateProgressUI(100, 'Direct file download started! Check your browser downloads bar.');
 
-        // Form POST trigger sends stream directly to Chrome download bar without RAM buffering
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = '/api/movies/download';
-        form.style.display = 'none';
-
-        const inputUrl = document.createElement('input');
-        inputUrl.type = 'hidden';
-        inputUrl.name = 'downloadUrl';
-        inputUrl.value = videoUrl;
-
-        const inputTitle = document.createElement('input');
-        inputTitle.type = 'hidden';
-        inputTitle.name = 'title';
-        inputTitle.value = movieTitleText;
-
-        form.appendChild(inputUrl);
-        form.appendChild(inputTitle);
-        document.body.appendChild(form);
-
-        form.submit();
-
-        setTimeout(() => {
-            form.remove();
-        }, 2000);
+        // Trigger direct native attachment download via GET endpoint
+        const streamEndpoint = `/api/movies/stream?url=${encodeURIComponent(videoUrl)}&title=${encodeURIComponent(movieTitleText)}`;
+        window.location.href = streamEndpoint;
     });
 
     // Start with quickdiscover grid

@@ -14,9 +14,10 @@ const arabicResolver = require('./arabicMediaResolver');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Enable CORS and JSON parsing
+// Enable CORS, JSON and URL-encoded form parsing
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Serve static frontend files
 app.use(express.static(path.join(__dirname, 'public')));
