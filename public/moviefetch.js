@@ -757,8 +757,18 @@ document.addEventListener('DOMContentLoaded', () => {
             (selectedDownloadOption.size === 'Stream');
 
         if (isStreamPage) {
-            window.open(videoUrl, '_blank');
-            updateProgressUI(100, '▶ Opening stream in new tab...');
+            // Show inline embedded player instead of opening a new tab
+            const modal = document.getElementById('stream-modal');
+            const iframe = document.getElementById('stream-iframe');
+            const modalTitle = document.getElementById('stream-modal-title');
+            if (modal && iframe) {
+                modalTitle.textContent = movieTitleText || 'Now Playing';
+                iframe.src = videoUrl;
+                modal.style.display = 'flex';
+            } else {
+                window.open(videoUrl, '_blank');
+            }
+            updateProgressUI(100, '▶ Streaming in player...');
             downloadProgress.classList.remove('hidden');
             return;
         }
@@ -771,6 +781,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const streamEndpoint = `/api/movies/stream?url=${encodeURIComponent(videoUrl)}&title=${encodeURIComponent(movieTitleText)}`;
         window.location.href = streamEndpoint;
     });
+
+    // Wire up stream modal close button
+    const streamModalClose = document.getElementById('stream-modal-close');
+    if (streamModalClose) {
+        streamModalClose.addEventListener('click', () => {
+            const modal = document.getElementById('stream-modal');
+            const iframe = document.getElementById('stream-iframe');
+            if (iframe) iframe.src = '';
+            if (modal) modal.style.display = 'none';
+        });
+    }
 
     // Start with quickdiscover grid
     initQuickTrending();
