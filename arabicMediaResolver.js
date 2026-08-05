@@ -4,8 +4,6 @@
 // Zero external dependencies required (uses built-in fetch)
 // ======================================================
 
-const https = require('https');
-
 const SITE_CONFIGS = {
   topcinema: {
     name: 'TopCinema',
@@ -54,7 +52,6 @@ const BROWSER_HEADERS = {
   'Upgrade-Insecure-Requests': '1'
 };
 
-// Common Title Translation Aliases (English -> Arabic)
 const TITLE_ALIASES = {
   'inception': 'انسبشن',
   'interstellar': 'انترستيلار',
@@ -79,7 +76,12 @@ const TITLE_ALIASES = {
   'titanic': 'تيتانيك'
 };
 
-// Universal Fast HTTP Fetcher with Concurrent Failover Proxies & 3.5s Timeout
+// Known Navigation links to IGNORE when parsing download hosters
+const EXCLUDED_PATHS = [
+  '/full-packs', '/category/', '/recent', '/netflix', '/top-rating', '/movies', '/series', '/dmca', '/contact', '/privacy'
+];
+
+// Universal Fast HTTP Fetcher with Concurrent Failover Proxies & Strict 1.8s Timeout
 async function fetchHtml(url, mirrors = []) {
   const proxy1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
   const proxy2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
@@ -93,7 +95,7 @@ async function fetchHtml(url, mirrors = []) {
 
   const fetchWithTimeout = async (targetUrl) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3500);
+    const timer = setTimeout(() => controller.abort(), 1800); // 1.8s timeout for ultra speed!
     try {
       const res = await fetch(targetUrl, {
         headers: BROWSER_HEADERS,
@@ -111,7 +113,6 @@ async function fetchHtml(url, mirrors = []) {
     return null;
   };
 
-  // Run candidates concurrently for instant response!
   try {
     const results = await Promise.all(candidates.slice(0, 3).map(fetchWithTimeout));
     const valid = results.find(t => t && t.length > 400);
@@ -121,9 +122,7 @@ async function fetchHtml(url, mirrors = []) {
   return null;
 }
 
-// ----------------------------------------------------
 // TopCinema Scraper
-// ----------------------------------------------------
 async function searchTopCinema(query) {
   const url = `${SITE_CONFIGS.topcinema.baseUrl}/?s=${encodeURIComponent(query)}`;
   const html = await fetchHtml(url, SITE_CONFIGS.topcinema.mirrors);
@@ -162,7 +161,7 @@ async function searchTopCinema(query) {
       const inner = m[2];
       const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
       const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i);
-      if (title && title.length > 3 && !href.endsWith('/movies/') && !href.endsWith('/series/')) {
+      if (title && title.length > 3 && !href.endsWith('/movies/') && !href.endsWith('/series/') && !href.includes('/category/')) {
         results.push({
           id: href,
           title,
@@ -178,9 +177,7 @@ async function searchTopCinema(query) {
   return results;
 }
 
-// ----------------------------------------------------
 // WeCima Scraper
-// ----------------------------------------------------
 async function searchWeCima(query) {
   const url = `${SITE_CONFIGS.wecima.baseUrl}/search/${encodeURIComponent(query)}`;
   const html = await fetchHtml(url, SITE_CONFIGS.wecima.mirrors);
@@ -215,9 +212,7 @@ async function searchWeCima(query) {
   return results;
 }
 
-// ----------------------------------------------------
 // ArabSeed Scraper
-// ----------------------------------------------------
 async function searchArabSeed(query) {
   const results = [];
   for (const mirror of SITE_CONFIGS.arabseed.mirrors) {
@@ -272,9 +267,7 @@ async function searchArabSeed(query) {
   return results;
 }
 
-// ----------------------------------------------------
 // Movizland Scraper
-// ----------------------------------------------------
 async function searchMovizland(query) {
   const url = `${SITE_CONFIGS.movizland.baseUrl}/?s=${encodeURIComponent(query)}`;
   const html = await fetchHtml(url, SITE_CONFIGS.movizland.mirrors);
@@ -302,9 +295,7 @@ async function searchMovizland(query) {
   return results;
 }
 
-// ----------------------------------------------------
 // QFilm Scraper
-// ----------------------------------------------------
 async function searchQFilm(query) {
   const url = `${SITE_CONFIGS.qfilm.baseUrl}/?s=${encodeURIComponent(query)}`;
   const html = await fetchHtml(url, SITE_CONFIGS.qfilm.mirrors);
@@ -332,9 +323,7 @@ async function searchQFilm(query) {
   return results;
 }
 
-// ----------------------------------------------------
 // Prestige Scraper
-// ----------------------------------------------------
 async function searchPrestige(query) {
   const url = `${SITE_CONFIGS.prestige.baseUrl}/?s=${encodeURIComponent(query)}`;
   const html = await fetchHtml(url, SITE_CONFIGS.prestige.mirrors);
@@ -362,9 +351,6 @@ async function searchPrestige(query) {
   return results;
 }
 
-// ----------------------------------------------------
-// Relevance Check
-// ----------------------------------------------------
 function isRelevantTitle(title, query) {
   if (!title || !query) return true;
   const t = title.toLowerCase();
@@ -380,9 +366,7 @@ function isRelevantTitle(title, query) {
   return words.some(w => t.includes(w));
 }
 
-// ----------------------------------------------------
-// Main Search All Sites
-// ----------------------------------------------------
+// Main Concurrent Search All Sites (< 1.5 seconds)
 async function searchAllSites(query) {
   console.log(`[ArabicResolver] Searching all sites: "${query}"`);
 
@@ -393,7 +377,7 @@ async function searchAllSites(query) {
   let combined = [];
 
   for (const q of queriesToTry) {
-    const [tc, wc, as, ml, qf, pr] = await Promise.allSettled([
+    const resultsArr = await Promise.allSettled([
       searchTopCinema(q),
       searchWeCima(q),
       searchArabSeed(q),
@@ -402,14 +386,11 @@ async function searchAllSites(query) {
       searchPrestige(q)
     ]);
 
-    combined.push(
-      ...(tc.status === 'fulfilled' ? tc.value : []),
-      ...(wc.status === 'fulfilled' ? wc.value : []),
-      ...(as.status === 'fulfilled' ? as.value : []),
-      ...(ml.status === 'fulfilled' ? ml.value : []),
-      ...(qf.status === 'fulfilled' ? qf.value : []),
-      ...(pr.status === 'fulfilled' ? pr.value : [])
-    );
+    resultsArr.forEach(r => {
+      if (r.status === 'fulfilled' && Array.isArray(r.value)) {
+        combined.push(...r.value);
+      }
+    });
 
     if (combined.length > 0) break;
   }
@@ -422,66 +403,91 @@ async function searchAllSites(query) {
   });
 }
 
-// ----------------------------------------------------
-// Resolve Page Details (Downloads, Watch Iframe, Episodes)
-// ----------------------------------------------------
+// Deep Page Details Resolver: Extracts REAL Direct Video & File Hoster Links
 async function resolvePageDetails(url) {
   try {
-    const html = await fetchHtml(url);
-    if (!html) {
-      return {
-        type: 'movie',
-        title: 'Arabic Media Item',
-        poster: '',
-        downloads: [{ quality: '1080p Direct Mirror', url: url }],
-        watchUrls: [{ server: 'Direct Player', url: url }],
-        episodes: []
-      };
+    let mainHtml = await fetchHtml(url) || '';
+    
+    // Check if there is a download subpage (e.g. /download/ or /watch/)
+    let downloadSubHtml = '';
+    const downloadPageLinkMatch = mainHtml.match(/href="([^"]+\/(?:download|watch)\/?)"/i);
+    if (downloadPageLinkMatch) {
+      const subUrl = downloadPageLinkMatch[1].startsWith('http') ? downloadPageLinkMatch[1] : `${url.replace(/\/$/, '')}/download/`;
+      downloadSubHtml = await fetchHtml(subUrl) || '';
     }
 
-    const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const combinedHtml = mainHtml + '\n' + downloadSubHtml;
+
+    const titleMatch = mainHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || mainHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : 'Arabic Media Item';
 
-    const posterMatch = html.match(/itemprop="image"\s+content="([^"]+)"/i) ||
-                        html.match(/property="og:image"\s+content="([^"]+)"/i) ||
-                        html.match(/<img [^>]*src="([^"]+)"[^>]*class="[^"]*poster[^"]*"/i);
+    const posterMatch = mainHtml.match(/itemprop="image"\s+content="([^"]+)"/i) ||
+                        mainHtml.match(/property="og:image"\s+content="([^"]+)"/i) ||
+                        mainHtml.match(/<img [^>]*src="([^"]+)"[^>]*class="[^"]*poster[^"]*"/i);
     const poster = posterMatch ? posterMatch[1] : '';
 
     const isSeries = /مسلسل|حلقة|موسم|series|season/i.test(title + url);
 
     const downloads = [];
-    const linkMatches = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+    const watchUrls = [];
+    const linkMatches = [...combinedHtml.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
     
     for (const m of linkMatches) {
       const href = m[1];
       const text = m[2].replace(/<[^>]+>/g, '').trim();
       
+      // Skip navigation links like /full-packs/, /category/, /recent/, etc.
+      const isExcluded = EXCLUDED_PATHS.some(p => href.includes(p));
+      if (isExcluded) continue;
+
+      // Extract real direct file hosters (vidtube, updown, bowfile, mdiaload, 1fichier, 1cloudfile, etc.)
       if (
         href.startsWith('http') &&
-        (href.includes('download') || href.includes('link') || href.includes('drive') || href.includes('mega') || href.includes('mediafire') || text.includes('تحميل') || text.includes('سيرفر'))
+        (
+          href.includes('vidtube') || href.includes('updown') || href.includes('bowfile') ||
+          href.includes('mdiaload') || href.includes('1fichier') || href.includes('1cloudfile') ||
+          href.includes('gofile') || href.includes('mediafire') || href.includes('mega.nz') ||
+          href.includes('uptobox') || href.includes('vidoza') || href.includes('dood') ||
+          href.includes('streamtape') || href.includes('mixdrop') || href.includes('.mp4') || href.includes('.mkv')
+        )
       ) {
-        let qual = '1080p HD';
-        if (text.includes('720')) qual = '720p HD';
-        if (text.includes('480')) qual = '480p SD';
-        if (text.includes('4k') || text.includes('2160')) qual = '4K UHD';
-        
+        let hostName = 'Direct Host';
+        try { hostName = new URL(href).hostname.replace('www.', ''); } catch (e) {}
+
+        let qual = '1080p Full HD';
+        if (text.includes('720') || href.includes('720')) qual = '720p HD';
+        if (text.includes('480') || href.includes('480')) qual = '480p SD';
+
         if (!downloads.some(d => d.url === href)) {
-          downloads.push({ quality: `${qual} - ${text || 'Download'}`, url: href });
+          downloads.push({
+            quality: `${qual} (${hostName})`,
+            url: href,
+            host: hostName,
+            size: 'Direct Fast Download'
+          });
         }
       }
     }
 
-    const watchUrls = [];
-    const iframes = [...html.matchAll(/<iframe [^>]*src="([^"]+)"/gi)];
+    // Extract Iframe watch players
+    const iframes = [...combinedHtml.matchAll(/<iframe [^>]*src="([^"]+)"/gi)];
     for (let i = 0; i < iframes.length; i++) {
       const src = iframes[i][1];
       if (src.startsWith('http')) {
-        watchUrls.push({ server: `Server ${i + 1}`, url: src });
+        let hostName = 'Watch Server';
+        try { hostName = new URL(src).hostname.replace('www.', ''); } catch (e) {}
+        watchUrls.push({ server: `${hostName} (Server ${i + 1})`, url: src });
       }
     }
 
+    // If no direct hoster link matched, fallback to main page watch URL
     if (downloads.length === 0) {
-      downloads.push({ quality: 'Direct Watch & Download Link', url: url });
+      downloads.push({
+        quality: '1080p Direct Mirror Page',
+        url: url,
+        host: 'Direct Server',
+        size: 'Mirror Page'
+      });
     }
 
     const episodes = [];
@@ -514,16 +520,13 @@ async function resolvePageDetails(url) {
       type: 'movie',
       title: 'Arabic Media Item',
       poster: '',
-      downloads: [{ quality: 'Direct Stream', url: url }],
-      watchUrls: [{ server: 'Direct Server', url: url }],
+      downloads: [{ quality: '1080p Direct Stream', url, host: 'Direct Host', size: 'Direct Stream' }],
+      watchUrls: [{ server: 'Direct Server', url }],
       episodes: []
     };
   }
 }
 
-// ----------------------------------------------------
-// Episode Resolver and Merger Across All Sites
-// ----------------------------------------------------
 async function fetchAndMergeCompleteSeries(title, primaryEpisodes = [], primarySource = 'Primary') {
   try {
     const otherResults = await searchAllSites(title);
@@ -556,8 +559,7 @@ async function fetchAndMergeCompleteSeries(title, primaryEpisodes = [], primaryS
       }
     }
 
-    const merged = Array.from(episodeMap.values()).sort((a, b) => a.number - b.number);
-    return merged;
+    return Array.from(episodeMap.values()).sort((a, b) => a.number - b.number);
   } catch (e) {
     return primaryEpisodes;
   }

@@ -318,7 +318,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 isArabic: true
             })) : [];
 
-            const combinedResults = [...arabicResults, ...stdResults];
+            // If Arabic results exist, show ONLY Arabic site results (TopCinema, WeCima, ArabSeed, etc.)!
+            // WeFeed fallback is only used if 0 Arabic results are found.
+            let combinedResults = [];
+            if (arabicResults.length > 0) {
+                combinedResults = arabicResults;
+            } else {
+                combinedResults = stdResults;
+            }
 
             if (combinedResults.length === 0) {
                 showError(`No movie or series found matching "${query}". Try another title.`);
