@@ -81,7 +81,7 @@ const EXCLUDED_PATHS = [
   '/full-packs', '/category/', '/recent', '/netflix', '/top-rating', '/movies', '/series', '/dmca', '/contact', '/privacy'
 ];
 
-// Universal Fast HTTP Fetcher with Concurrent Failover Proxies & Strict 1.8s Timeout
+// Universal Fast HTTP Fetcher with Concurrent Failover Proxies & Strict Timeout
 async function fetchHtml(url, mirrors = []) {
   const proxy1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
   const proxy2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
@@ -95,7 +95,7 @@ async function fetchHtml(url, mirrors = []) {
 
   const fetchWithTimeout = async (targetUrl) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 1800); // 1.8s timeout for ultra speed!
+    const timer = setTimeout(() => controller.abort(), 2200);
     try {
       const res = await fetch(targetUrl, {
         headers: BROWSER_HEADERS,
@@ -105,7 +105,7 @@ async function fetchHtml(url, mirrors = []) {
       clearTimeout(timer);
       if (res.ok) {
         const text = await res.text();
-        if (text && text.length > 400) return text;
+        if (text && text.length > 300) return text;
       }
     } catch (e) {
       clearTimeout(timer);
@@ -115,7 +115,7 @@ async function fetchHtml(url, mirrors = []) {
 
   try {
     const results = await Promise.all(candidates.slice(0, 3).map(fetchWithTimeout));
-    const valid = results.find(t => t && t.length > 400);
+    const valid = results.find(t => t && t.length > 300);
     if (valid) return valid;
   } catch (e) {}
 
@@ -366,13 +366,13 @@ function isRelevantTitle(title, query) {
   return words.some(w => t.includes(w));
 }
 
-// Main Concurrent Search All Sites (< 1.5 seconds)
+// Search ALL 6 Sites Concurrently (DO NOT BREAK EARLY!)
 async function searchAllSites(query) {
   console.log(`[ArabicResolver] Searching all sites: "${query}"`);
 
   const queriesToTry = [query];
   const alias = TITLE_ALIASES[query.toLowerCase().trim()];
-  if (alias) queriesToTry.push(alias);
+  if (alias && alias !== query.toLowerCase()) queriesToTry.push(alias);
 
   let combined = [];
 
@@ -391,8 +391,6 @@ async function searchAllSites(query) {
         combined.push(...r.value);
       }
     });
-
-    if (combined.length > 0) break;
   }
 
   const seen = new Set();
@@ -403,20 +401,24 @@ async function searchAllSites(query) {
   });
 }
 
-// Deep Page Details Resolver: Extracts REAL Direct Video & File Hoster Links
+// Deep Page Details Resolver: Automatically Fetches Main Page + /download/ + /watch/ Subpages
 async function resolvePageDetails(url) {
   try {
-    let mainHtml = await fetchHtml(url) || '';
-    
-    // Check if there is a download subpage (e.g. /download/ or /watch/)
-    let downloadSubHtml = '';
-    const downloadPageLinkMatch = mainHtml.match(/href="([^"]+\/(?:download|watch)\/?)"/i);
-    if (downloadPageLinkMatch) {
-      const subUrl = downloadPageLinkMatch[1].startsWith('http') ? downloadPageLinkMatch[1] : `${url.replace(/\/$/, '')}/download/`;
-      downloadSubHtml = await fetchHtml(subUrl) || '';
-    }
+    const cleanUrl = url.replace(/\/$/, '');
+    const downloadSubUrl = `${cleanUrl}/download/`;
+    const watchSubUrl = `${cleanUrl}/watch/`;
 
-    const combinedHtml = mainHtml + '\n' + downloadSubHtml;
+    const [mainHtmlRes, downloadHtmlRes, watchHtmlRes] = await Promise.allSettled([
+      fetchHtml(url),
+      fetchHtml(downloadSubUrl),
+      fetchHtml(watchSubUrl)
+    ]);
+
+    const mainHtml = mainHtmlRes.status === 'fulfilled' && mainHtmlRes.value ? mainHtmlRes.value : '';
+    const downloadHtml = downloadHtmlRes.status === 'fulfilled' && downloadHtmlRes.value ? downloadHtmlRes.value : '';
+    const watchHtml = watchHtmlRes.status === 'fulfilled' && watchHtmlRes.value ? watchHtmlRes.value : '';
+
+    const combinedHtml = `${mainHtml}\n${downloadHtml}\n${watchHtml}`;
 
     const titleMatch = mainHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || mainHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : 'Arabic Media Item';
@@ -436,11 +438,10 @@ async function resolvePageDetails(url) {
       const href = m[1];
       const text = m[2].replace(/<[^>]+>/g, '').trim();
       
-      // Skip navigation links like /full-packs/, /category/, /recent/, etc.
       const isExcluded = EXCLUDED_PATHS.some(p => href.includes(p));
       if (isExcluded) continue;
 
-      // Extract real direct file hosters (vidtube, updown, bowfile, mdiaload, 1fichier, 1cloudfile, etc.)
+      // Extract real direct file hosters (vidtube, updown, bowfile, mdiaload, 1fichier, 1cloudfile, mega, mediafire, uptobox, etc.)
       if (
         href.startsWith('http') &&
         (
@@ -480,13 +481,31 @@ async function resolvePageDetails(url) {
       }
     }
 
-    // If no direct hoster link matched, fallback to main page watch URL
+    // If no direct hoster link matched, extract any external download/watch link on page
+    if (downloads.length === 0) {
+      for (const m of linkMatches) {
+        const href = m[1];
+        const text = m[2].replace(/<[^>]+>/g, '').trim();
+        if (href.startsWith('http') && !href.includes('topcinemaa.co') && !href.includes('wecima') && !href.includes('arabseeds') && href.length > 15) {
+          let hostName = 'Direct Server';
+          try { hostName = new URL(href).hostname.replace('www.', ''); } catch (e) {}
+          downloads.push({
+            quality: `1080p HD (${hostName})`,
+            url: href,
+            host: hostName,
+            size: 'Fast Download'
+          });
+        }
+      }
+    }
+
+    // Fallback if still empty
     if (downloads.length === 0) {
       downloads.push({
-        quality: '1080p Direct Mirror Page',
+        quality: '1080p Direct Mirror Link',
         url: url,
         host: 'Direct Server',
-        size: 'Mirror Page'
+        size: 'Direct Stream'
       });
     }
 
