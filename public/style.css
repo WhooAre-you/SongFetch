@@ -1247,3 +1247,69 @@ body {
 }
 
 
+/* -------------------------------------------------
+   Responsive Layout – Mobile First
+   ------------------------------------------------- */
+
+/* Navigation: stack items on small screens */
+@media (max-width: 560px) {
+    .app-nav {
+        flex-direction: column;
+        gap: 0.5rem;
+        padding: 8px;
+    }
+    .app-nav .nav-item {
+        justify-content: center;
+        font-size: 0.9rem;
+    }
+}
+
+/* Gateway Grid: auto‑fit cards */
+.gateway-grid {
+    display: grid;
+    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+/* Card glows & icons – scale down */
+@media (max-width: 560px) {
+    .gateway-card {
+        padding: 1.5rem;
+    }
+    .gateway-card .card-icon-container svg {
+        width: 30px;
+        height: 30px;
+    }
+    .gateway-card h2 {
+        font-size: 1.2rem;
+    }
+    .gateway-card .card-desc {
+        font-size: 0.85rem;
+    }
+}
+
+/* Header logo scaling */
+@media (max-width: 560px) {
+    .logo svg {
+        width: 28px;
+        height: 28px;
+    }
+    .logo span {
+        font-size: 1.5rem;
+    }
+}
+
+/* Footer text */
+@media (max-width: 560px) {
+    .footer {
+        font-size: 0.75rem;
+    }
+}
+
+/* Ensure container stays centered */
+@media (max-width: 560px) {
+    .container {
+        padding: 1rem 0.5rem;
+        max-width: 100%;
+    }
+}

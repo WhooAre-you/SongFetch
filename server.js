@@ -934,6 +934,35 @@ app.get('/api/movies/search', async (req, res) => {
   }
 });
 
+// Route: Resolve IMDB ID for VidSrc integration
+app.post('/api/movies/imdb', async (req, res) => {
+  const { title } = req.body;
+  if (!title) {
+    return res.status(400).json({ error: 'Title is required' });
+  }
+
+  try {
+    const query = encodeURIComponent(title.toLowerCase());
+    const url = `https://v3.sg.media-imdb.com/suggestion/x/${query}.json`;
+    
+    const imdbRes = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+    });
+    
+    if (imdbRes.data && imdbRes.data.d && imdbRes.data.d.length > 0) {
+      const match = imdbRes.data.d.find(item => item.id && item.id.startsWith('tt'));
+      if (match) {
+        return res.json({ imdbId: match.id });
+      }
+    }
+    
+    res.status(404).json({ error: 'IMDB ID not found for the given title.' });
+  } catch (err) {
+    console.error('IMDB resolution failed:', err.message);
+    res.status(500).json({ error: 'IMDB resolution failed' });
+  }
+});
+
 // Route: MovieFetch watch page details scraping (episodes or download options)
 app.post('/api/movies/info', async (req, res) => {
   const { url } = req.body;
@@ -961,10 +990,7 @@ app.post('/api/movies/info', async (req, res) => {
           'Accept': 'application/json',
           'X-Source': 'downloader',
           'X-Site-Domain': 'videodownloader.site',
-          'Authorization': `Bearer ${token}`,
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Origin': 'https://videodownloader.site',
-          'Referer': 'https://videodownloader.site/'
+          'Authorization': `Bearer ${token}`
         }
       });
       
@@ -1057,235 +1083,124 @@ app.post('/api/movies/info', async (req, res) => {
   }
 });
 
-// Route: MovieFetch download and subtitle embedding
+// Route: MovieFetch download (proxying stream without subtitle multiplexing)
 app.post('/api/movies/download', async (req, res) => {
-  const { downloadUrl, subtitleLang, title } = req.body;
+  const { downloadUrl, title } = req.body;
   if (!downloadUrl) {
     return res.status(400).json({ error: 'Download URL is required' });
   }
 
-  console.log(`Download request received for: "${title}" (Subs: ${subtitleLang})`);
-  const uniqueId = `movie_${Date.now()}`;
-  const jobTempDir = path.join(tempDir, uniqueId);
-  fs.mkdirSync(jobTempDir, { recursive: true });
-
-  const rawVideoPath = path.join(jobTempDir, 'raw.mp4');
-  const finalVideoPath = path.join(jobTempDir, 'final.mp4');
-  const araSrtPath = path.join(jobTempDir, 'arabic.srt');
-  const engSrtPath = path.join(jobTempDir, 'english.srt');
-
+  console.log(`Download request received for: "${title}"`);
+  
   try {
-    // 1. Parse composite download URL containing true video link and subtitles list
     let actualVideoUrl = downloadUrl;
-    let captions = [];
     try {
       const parsed = JSON.parse(downloadUrl);
-      if (parsed.videoUrl) {
-        actualVideoUrl = parsed.videoUrl;
-        captions = parsed.captions || [];
-      }
+      if (parsed.videoUrl) actualVideoUrl = parsed.videoUrl;
     } catch (e) {
-      // fallback to original if not a packed JSON string
+      // fallback
     }
 
-    // 2. Download subtitles directly from WeFeed CDN
-    let araDownloaded = false;
-    let engDownloaded = false;
-    
-    if (subtitleLang && subtitleLang !== 'none') {
-      console.log('Resolving direct subtitles from WeFeed captions list...');
-      const arabicCap = captions.find(c => c.lan === 'ar');
-      const englishCap = captions.find(c => c.lan === 'en');
-      
-      if ((subtitleLang === 'ara' || subtitleLang === 'both') && arabicCap?.url) {
-        console.log(`Downloading Arabic subtitle direct from: ${arabicCap.url}`);
-        araDownloaded = await downloadDirectSubtitle(arabicCap.url, araSrtPath);
-        console.log('Arabic subtitle download status:', araDownloaded);
-      }
-      
-      if ((subtitleLang === 'eng' || subtitleLang === 'both') && englishCap?.url) {
-        console.log(`Downloading English subtitle direct from: ${englishCap.url}`);
-        engDownloaded = await downloadDirectSubtitle(englishCap.url, engSrtPath);
-        console.log('English subtitle download status:', engDownloaded);
-      }
-    }
-
-    // 3. Download the Movie
-    console.log(`Downloading movie stream from: ${actualVideoUrl}`);
-    let videoSuccess = false;
-    
-    // Direct CDN downloads from hakunaymatata / aoneroom or standard mp4 links
-    const isDirectMp4 = actualVideoUrl.toLowerCase().includes('.mp4') || 
-                        actualVideoUrl.includes('hakunaymatata') || 
-                        actualVideoUrl.includes('aoneroom') || 
-                        actualVideoUrl.includes('downet.net');
-    
-    if (isDirectMp4) {
-      try {
-        console.log('Detected direct HTTP download link. Running direct Axios streaming download...');
-        const downloadResponse = await axios({
-          url: actualVideoUrl,
-          method: 'GET',
-          responseType: 'stream',
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Origin': 'https://videodownloader.site',
-            'Referer': 'https://videodownloader.site/'
-          }
-        });
-
-        const writer = fs.createWriteStream(rawVideoPath);
-        downloadResponse.data.pipe(writer);
-
-        await new Promise((resolve, reject) => {
-          writer.on('finish', resolve);
-          writer.on('error', reject);
-        });
-        videoSuccess = fs.existsSync(rawVideoPath);
-      } catch (err) {
-        console.warn('Direct HTTP download failed:', err.message);
-      }
-    } else {
-      // yt-dlp fallback download
-      try {
-        const ytDlpBinary = await ensureYtDlp();
-        const ffmpegDir = path.dirname(ffmpegPath);
-        const args = [
-          '--js-runtimes', 'node',
-          '--impersonate', 'chrome',
-          '--no-cache-dir',
-          '--ffmpeg-location', ffmpegDir,
-          '-f', 'best',
-          '-o', rawVideoPath,
-          actualVideoUrl
-        ];
-        
-        await new Promise((resolve, reject) => {
-          execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
-            if (error) reject(error);
-            else resolve();
-          });
-        });
-        videoSuccess = fs.existsSync(rawVideoPath);
-      } catch (e) {
-        console.warn('yt-dlp direct download failed or rate limited:', e.message);
-      }
-    }
-
-    // Fallback cinematic placeholder generator (if download fails)
-    if (!videoSuccess) {
-      console.log(`Using fallback cinematic placeholder generator for "${title}"...`);
-      const ffmpegDir = path.dirname(ffmpegPath);
-      const ffmpegBin = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
-      const ffmpegFullPath = path.join(ffmpegDir, ffmpegBin);
-      
-      const escapedTitle = title.replace(/['"]/g, '');
-      const filterStr = `drawtext=text='MovieFetch':fontcolor=yellow:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/3,drawtext=text='Downloaded: ${escapedTitle}':fontcolor=white:fontsize=24:x=(w-text_w)/2:y=(h-text_h)/2+40,drawtext=text='Soft Subtitles Embedded (Arabic/English)':fontcolor=gray:fontsize=18:x=(w-text_w)/2:y=(h-text_h)/2+100`;
-      
-      const genArgs = [
-        '-y',
-        '-f', 'lavfi',
-        '-i', 'color=c=black:s=1280x720:d=10',
-        '-f', 'lavfi',
-        '-i', 'sine=frequency=440:duration=10',
-        '-vf', filterStr,
-        '-c:v', 'libx264',
-        '-c:a', 'aac',
-        rawVideoPath
-      ];
-
-      await new Promise((resolve, reject) => {
-        execFile(ffmpegFullPath, genArgs, (err) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-      videoSuccess = fs.existsSync(rawVideoPath);
-    }
-
-    if (!videoSuccess) {
-      throw new Error('Failed to generate or download video.');
-    }
-
-    // 4. Merge Subtitles using FFmpeg
-    console.log('Embedding subtitles using FFmpeg...');
-    const ffmpegDir = path.dirname(ffmpegPath);
-    const ffmpegBin = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg';
-    const ffmpegFullPath = path.join(ffmpegDir, ffmpegBin);
-    
-    let mergeArgs = ['-y', '-i', rawVideoPath];
-    let subtitleInputsCount = 0;
-    
-    if (araDownloaded) {
-      mergeArgs.push('-i', araSrtPath);
-      subtitleInputsCount++;
-    }
-    if (engDownloaded) {
-      mergeArgs.push('-i', engSrtPath);
-      subtitleInputsCount++;
-    }
-
-    mergeArgs.push('-c', 'copy');
-    
-    if (subtitleInputsCount > 0) {
-      mergeArgs.push('-c:s', 'mov_text');
-      
-      if (araDownloaded && engDownloaded) {
-        mergeArgs.push(
-          '-map', '0:0', '-map', '0:1',
-          '-map', '1:0', '-map', '2:0',
-          '-metadata:s:s:0', 'language=ara', '-metadata:s:s:0', 'title=Arabic',
-          '-metadata:s:s:1', 'language=eng', '-metadata:s:s:1', 'title=English'
-        );
-      } else if (araDownloaded) {
-        mergeArgs.push(
-          '-map', '0:0', '-map', '0:1', '-map', '1:0',
-          '-metadata:s:s:0', 'language=ara', '-metadata:s:s:0', 'title=Arabic'
-        );
-      } else if (engDownloaded) {
-        mergeArgs.push(
-          '-map', '0:0', '-map', '0:1', '-map', '1:0',
-          '-metadata:s:s:0', 'language=eng', '-metadata:s:s:0', 'title=English'
-        );
-      }
-    }
-
-    mergeArgs.push(finalVideoPath);
-
-    await new Promise((resolve, reject) => {
-      execFile(ffmpegFullPath, mergeArgs, (err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
-
-    const sendFilePath = fs.existsSync(finalVideoPath) ? finalVideoPath : rawVideoPath;
-
-    // 5. Stream compiled MP4 file back to browser
     const safeFilename = `${title}.mp4`.replace(/[\\/:*?"<>|]/g, '_');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
     res.setHeader('Content-Type', 'video/mp4');
 
-    const fileStream = fs.createReadStream(sendFilePath);
-    fileStream.pipe(res);
-
-    fileStream.on('end', () => {
-      fs.rm(jobTempDir, { recursive: true, force: true }, (err) => {
-        if (err) console.error('Failed to clean up job directory:', err.message);
-      });
+    const downloadResponse = await axios({
+      url: actualVideoUrl,
+      method: 'GET',
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Origin': 'https://videodownloader.site',
+        'Referer': 'https://videodownloader.site/'
+      }
     });
 
-    fileStream.on('error', (err) => {
-      console.error('File stream transmission error:', err.message);
-      fs.rm(jobTempDir, { recursive: true, force: true }, () => {});
-    });
-
+    downloadResponse.data.pipe(res);
   } catch (err) {
-    console.error('Movie download handler failed:', err.message);
-    fs.rm(jobTempDir, { recursive: true, force: true }, () => {});
-    res.status(500).json({ error: err.message || 'An error occurred during movie download.' });
+    console.error('Movie download proxy failed:', err.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: err.message || 'An error occurred during movie download.' });
+    }
   }
 });
+
+// Route: OpenSubtitles Search
+app.post('/api/subtitles/search', async (req, res) => {
+  const { imdbId } = req.body;
+  if (!imdbId) return res.status(400).json({ error: 'IMDB ID required' });
+  
+  try {
+    const cleanId = imdbId.replace('tt', '');
+    const urlEng = `https://rest.opensubtitles.org/search/imdbid-${cleanId}/sublanguageid-eng`;
+    const urlAra = `https://rest.opensubtitles.org/search/imdbid-${cleanId}/sublanguageid-ara`;
+    
+    const [resEng, resAra] = await Promise.all([
+      fetch(urlEng, { headers: { 'User-Agent': 'TemporaryUserAgent' } }).catch(() => null),
+      fetch(urlAra, { headers: { 'User-Agent': 'TemporaryUserAgent' } }).catch(() => null)
+    ]);
+    
+    let allSubs = [];
+    if (resEng && resEng.ok) {
+        const data = await resEng.json().catch(() => []);
+        if (Array.isArray(data)) allSubs = allSubs.concat(data);
+    }
+    if (resAra && resAra.ok) {
+        const data = await resAra.json().catch(() => []);
+        if (Array.isArray(data)) allSubs = allSubs.concat(data);
+    }
+    
+    if (allSubs.length > 0) {
+      const results = allSubs
+        .map(s => ({
+          id: s.IDSubtitleFile,
+          fileName: s.SubFileName,
+          lang: s.LanguageName,
+          langId: s.SubLanguageID,
+          downloadLink: s.SubDownloadLink, // .gz link
+          size: s.SubSize,
+          rating: s.SubRating
+        }))
+        .slice(0, 15);
+      return res.json({ subtitles: results });
+    }
+    res.json({ subtitles: [] });
+  } catch (err) {
+    console.error('Subtitles search failed:', err.message);
+    res.status(500).json({ error: 'Failed to fetch subtitles' });
+  }
+});
+
+// Route: OpenSubtitles Download & Decompress proxy
+app.post('/api/subtitles/download', async (req, res) => {
+  const { downloadLink, fileName } = req.body;
+  if (!downloadLink) return res.status(400).json({ error: 'Download link required' });
+  
+  try {
+    const subRes = await fetch(downloadLink, {
+      method: 'GET',
+      headers: { 'User-Agent': 'TemporaryUserAgent' }
+    });
+    
+    if (!subRes.ok) throw new Error('Failed to fetch from OpenSubtitles');
+    
+    // Decompress the .gz stream
+    const zlib = require('zlib');
+    const gunzip = zlib.createGunzip();
+    
+    const safeName = (fileName || 'subtitle.srt').replace(/[\\/:*?"<>|]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeName)}"`);
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8'); // Send as plain text so it's a standard SRT
+    
+    // Pipe standard node streams: fetch body uses require('stream').Readable.fromWeb(subRes.body)
+    const { Readable } = require('stream');
+    Readable.fromWeb(subRes.body).pipe(gunzip).pipe(res);
+  } catch (err) {
+    console.error('Subtitle download failed:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Failed to download subtitle' });
+  }
+});
+
 
 
 
