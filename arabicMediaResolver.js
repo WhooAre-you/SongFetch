@@ -119,7 +119,6 @@ async function searchTopCinema(query) {
   if (!html) return [];
 
   const results = [];
-  // Match .Small--Box or anchor items
   const boxMatches = html.match(/<div class="Small--Box">[\s\S]*?<\/div>/gi) || [];
   
   for (const box of boxMatches) {
@@ -145,7 +144,6 @@ async function searchTopCinema(query) {
     }
   }
 
-  // Fallback: match generic links if empty
   if (results.length === 0) {
     const linkMatches = [...html.matchAll(/<a [^>]*href="(https?:\/\/topcinemaa\.[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
     for (const m of linkMatches) {
@@ -207,12 +205,10 @@ async function searchWeCima(query) {
 }
 
 // ----------------------------------------------------
-// ArabSeed Scraper (API + Fallback Regex)
+// ArabSeed Scraper
 // ----------------------------------------------------
 async function searchArabSeed(query) {
   const results = [];
-  
-  // 1. Try WP JSON REST API first
   for (const mirror of SITE_CONFIGS.arabseed.mirrors) {
     try {
       const apiUrl = `${mirror}/wp-json/wp/v2/posts?search=${encodeURIComponent(query)}&per_page=10`;
@@ -240,7 +236,6 @@ async function searchArabSeed(query) {
     } catch (e) {}
   }
 
-  // 2. HTML Regex fallback
   const url = `${SITE_CONFIGS.arabseed.baseUrl}/?s=${encodeURIComponent(query)}`;
   const html = await fetchHtml(url, SITE_CONFIGS.arabseed.mirrors);
   if (!html) return results;
@@ -375,7 +370,7 @@ function isRelevantTitle(title, query) {
 }
 
 // ----------------------------------------------------
-// Main: Search All Sites Parallel
+// Main Search All Sites
 // ----------------------------------------------------
 async function searchAllSites(query) {
   console.log(`[ArabicResolver] Searching all sites: "${query}"`);
@@ -417,42 +412,149 @@ async function searchAllSites(query) {
 }
 
 // ----------------------------------------------------
-// Episode Resolver and Merger
+// Resolve Page Details (Downloads, Watch Iframe, Episodes)
 // ----------------------------------------------------
-async function fetchAndMergeCompleteSeries(primaryUrl, source) {
+async function resolvePageDetails(url) {
   try {
-    const html = await fetchHtml(primaryUrl);
-    if (!html) return { url: primaryUrl, episodes: [], mergedFromSites: [] };
+    const html = await fetchHtml(url);
+    if (!html) {
+      return {
+        type: 'movie',
+        title: 'Arabic Media Item',
+        poster: '',
+        downloads: [{ quality: '1080p Direct Mirror', url: url }],
+        watchUrls: [{ server: 'Direct Player', url: url }],
+        episodes: []
+      };
+    }
 
-    const episodes = [];
-    const matches = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+    const titleMatch = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : 'Arabic Media Item';
+
+    const posterMatch = html.match(/itemprop="image"\s+content="([^"]+)"/i) ||
+                        html.match(/property="og:image"\s+content="([^"]+)"/i) ||
+                        html.match(/<img [^>]*src="([^"]+)"[^>]*class="[^"]*poster[^"]*"/i);
+    const poster = posterMatch ? posterMatch[1] : '';
+
+    const isSeries = /مسلسل|حلقة|موسم|series|season/i.test(title + url);
+
+    const downloads = [];
+    const linkMatches = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
     
-    for (const m of matches) {
+    for (const m of linkMatches) {
       const href = m[1];
       const text = m[2].replace(/<[^>]+>/g, '').trim();
-      const num = text.match(/\d+/);
-      if ((href.includes('episode') || href.includes('حلقة') || href.includes('ep')) && num) {
-        const epNum = parseInt(num[0], 10);
-        if (!episodes.find(e => e.number === epNum)) {
-          episodes.push({ number: epNum, url: href, title: text });
+      
+      if (
+        href.startsWith('http') &&
+        (href.includes('download') || href.includes('link') || href.includes('drive') || href.includes('mega') || href.includes('mediafire') || text.includes('تحميل') || text.includes('سيرفر'))
+      ) {
+        let qual = '1080p HD';
+        if (text.includes('720')) qual = '720p HD';
+        if (text.includes('480')) qual = '480p SD';
+        if (text.includes('4k') || text.includes('2160')) qual = '4K UHD';
+        
+        if (!downloads.some(d => d.url === href)) {
+          downloads.push({ quality: `${qual} - ${text || 'Download'}`, url: href });
         }
       }
     }
 
-    episodes.sort((a, b) => a.number - b.number);
+    const watchUrls = [];
+    const iframes = [...html.matchAll(/<iframe [^>]*src="([^"]+)"/gi)];
+    for (let i = 0; i < iframes.length; i++) {
+      const src = iframes[i][1];
+      if (src.startsWith('http')) {
+        watchUrls.push({ server: `Server ${i + 1}`, url: src });
+      }
+    }
+
+    if (downloads.length === 0) {
+      downloads.push({ quality: 'Direct Watch & Download Link', url: url });
+    }
+
+    const episodes = [];
+    if (isSeries) {
+      for (const m of linkMatches) {
+        const href = m[1];
+        const text = m[2].replace(/<[^>]+>/g, '').trim();
+        const epMatch = text.match(/حلقة\s*(\d+)|episode\s*(\d+)|ep\s*(\d+)/i) || href.match(/episode[-_](\d+)|حلقة[-_](\d+)/i);
+        if (epMatch) {
+          const epNum = parseInt(epMatch[1] || epMatch[2] || epMatch[3] || '1', 10);
+          if (!episodes.some(e => e.number === epNum)) {
+            episodes.push({ number: epNum, title: `الحلقة ${epNum}`, url: href.startsWith('http') ? href : url });
+          }
+        }
+      }
+      episodes.sort((a, b) => a.number - b.number);
+    }
 
     return {
-      url: primaryUrl,
-      episodes,
-      mergedFromSites: [source]
+      type: isSeries ? 'series' : 'movie',
+      title,
+      poster,
+      downloads,
+      watchUrls,
+      episodes
     };
   } catch (e) {
-    return { url: primaryUrl, episodes: [], mergedFromSites: [] };
+    console.error('[ArabicResolver] resolvePageDetails error:', e.message);
+    return {
+      type: 'movie',
+      title: 'Arabic Media Item',
+      poster: '',
+      downloads: [{ quality: 'Direct Stream', url: url }],
+      watchUrls: [{ server: 'Direct Server', url: url }],
+      episodes: []
+    };
+  }
+}
+
+// ----------------------------------------------------
+// Episode Resolver and Merger Across All Sites
+// ----------------------------------------------------
+async function fetchAndMergeCompleteSeries(title, primaryEpisodes = [], primarySource = 'Primary') {
+  try {
+    const otherResults = await searchAllSites(title);
+    const episodeMap = new Map();
+
+    for (const ep of primaryEpisodes) {
+      episodeMap.set(ep.number, {
+        number: ep.number,
+        title: ep.title || `Episode ${ep.number}`,
+        url: ep.url,
+        source: primarySource
+      });
+    }
+
+    for (const resItem of otherResults) {
+      if (resItem.sourceName !== primarySource && resItem.isSeries) {
+        try {
+          const details = await resolvePageDetails(resItem.id);
+          for (const ep of (details.episodes || [])) {
+            if (!episodeMap.has(ep.number)) {
+              episodeMap.set(ep.number, {
+                number: ep.number,
+                title: ep.title || `Episode ${ep.number}`,
+                url: ep.url,
+                source: resItem.sourceName
+              });
+            }
+          }
+        } catch (err) {}
+      }
+    }
+
+    const merged = Array.from(episodeMap.values()).sort((a, b) => a.number - b.number);
+    return merged;
+  } catch (e) {
+    return primaryEpisodes;
   }
 }
 
 module.exports = {
   searchAllSites,
+  resolvePageDetails,
   fetchAndMergeCompleteSeries,
   SITE_CONFIGS
 };
