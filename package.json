@@ -1,7 +1,7 @@
 {
   "name": "songfetch",
   "version": "1.0.0",
-  "description": "Download MP3s with embedded cover art and lyrics from Spotify, YouTube, Apple Music, Anghami, or raw search.",
+  "description": "Download MP3s with embedded cover art and lyrics from Spotify, YouTube, SoundCloud, or raw search.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

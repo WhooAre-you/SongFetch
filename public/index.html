@@ -6,277 +6,120 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="shortcut icon" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
-    <title>SongFetch 1.0 - Download MP3s with Lyrics & Cover Art</title>
+    <title>OmniFetch - High-Quality Music & Video Downloader Suite</title>
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="omnifetch.css">
     <link rel="manifest" href="manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="SongFetch">
-    <meta name="theme-color" content="#a855f7">
+    <meta name="apple-mobile-web-app-title" content="OmniFetch">
+    <meta name="theme-color" content="#6366f1">
 </head>
-<body>
+<body class="omnifetch-theme">
     <div class="background-glow">
         <div class="glow-1"></div>
         <div class="glow-2"></div>
     </div>
 
     <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <div class="logo">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- Navigation Tabs -->
+        <nav class="app-nav">
+            <a href="/" class="nav-item active">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                    <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+                <span>Home</span>
+            </a>
+            <a href="/songfetch.html" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M9 18V5l12-2v13"></path>
                     <circle cx="6" cy="18" r="3"></circle>
                     <circle cx="18" cy="16" r="3"></circle>
                 </svg>
-                <span>SongFetch <span class="version">1.0</span></span>
-            </div>
-            <p class="tagline">Convert any song link or name into a tagged, lyrics-embedded MP3 file</p>
-            <button id="pwa-install-btn" class="pwa-install-btn">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 17V3"></path>
-                    <path d="M7 8l5-5 5 5"></path>
-                    <path d="M20 21H4"></path>
+                <span>SongFetch</span>
+            </a>
+            <a href="/videofetch.html" class="nav-item">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
                 </svg>
-                <span>Add to Home Screen</span>
-            </button>
+                <span>VideoFetch</span>
+            </a>
+        </nav>
+
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+                <span>OmniFetch <span class="version">1.0</span></span>
+            </div>
+            <p class="tagline">The ultimate unified downloader suite for music and video files</p>
         </header>
 
-        <!-- Main Card -->
-        <main class="main-card">
-            <!-- Search Form -->
-            <section class="search-section">
-                <form id="search-form" class="search-form">
-                    <div class="input-wrapper">
-                        <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <input 
-                            type="text" 
-                            id="search-input" 
-                            placeholder="Paste link (Spotify, YouTube, Apple Music, Anghami, SoundCloud) or type song name..."
-                            required
-                            autocomplete="off"
-                        >
-                        <button type="button" id="clear-btn" class="clear-btn hidden" aria-label="Clear input">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                        </button>
-                    </div>
-                    <button type="submit" class="search-btn">
-                        <span>Search</span>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                            <polyline points="12 5 19 12 12 19"></polyline>
-                        </svg>
-                    </button>
-                </form>
-
-                <!-- Supported Platforms Badges -->
-                <div class="platforms-info">
-                    <span class="platform spotify"><span class="dot"></span>Spotify</span>
-                    <span class="platform youtube"><span class="dot"></span>YouTube</span>
-                    <span class="platform apple"><span class="dot"></span>Apple Music</span>
-                    <span class="platform anghami"><span class="dot"></span>Anghami</span>
-                    <span class="platform soundcloud"><span class="dot"></span>SoundCloud</span>
-                </div>
-            </section>
-
-            <!-- Loading State -->
-            <section id="loader" class="loader-section hidden">
-                <div class="spinner">
-                    <div class="double-bounce1"></div>
-                    <div class="double-bounce2"></div>
-                </div>
-                <p id="loader-text">Analyzing query...</p>
-            </section>
-
-            <!-- Result Card -->
-            <section id="result" class="result-section hidden">
-                <div class="song-card">
-                    <!-- Album Cover Art -->
-                    <div class="cover-container">
-                        <img id="cover-art" src="" alt="Album Cover">
-                        <div class="cover-overlay"></div>
-                    </div>
-                    
-                    <!-- Song Details -->
-                    <div class="song-details">
-                        <h2 id="song-title">Song Title</h2>
-                        <h3 id="song-artist">Artist Name</h3>
-                        <p class="album-info">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <circle cx="12" cy="12" r="10"></circle>
-                                <circle cx="12" cy="12" r="3"></circle>
-                            </svg>
-                            <span id="song-album">Album Name</span>
-                        </p>
-
-                        <!-- Download Actions -->
-                        <div class="download-container">
-                            <button id="download-btn" class="download-btn">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
-                                <span>Download tagged MP3</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Download Progress Screen -->
-                <div id="download-progress" class="download-progress-container hidden">
-                    <div class="progress-info">
-                        <span id="progress-status">Downloading audio from YouTube...</span>
-                        <span id="progress-percent">0%</span>
-                    </div>
-                    <div class="progress-bar-container">
-                        <div id="progress-fill" class="progress-bar-fill"></div>
-                    </div>
-                    <p class="progress-note">Please do not close this tab. Converting and tagging the file may take a moment.</p>
-                </div>
-
-                <!-- Lyrics Accordion -->
-                <div class="lyrics-accordion">
-                    <button id="lyrics-toggle-btn" class="lyrics-toggle-btn">
-                        <div class="toggle-title">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M12 20h9"></path>
-                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path>
-                            </svg>
-                            <span>Genius Lyrics</span>
-                        </div>
-                        <svg class="chevron-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                    </button>
-                    <div id="lyrics-viewport" class="lyrics-viewport">
-                        <pre id="lyrics-text">Lyrics will load here...</pre>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Search Options Result Card -->
-            <section id="search-options-result" class="result-section hidden">
-                <div class="song-card playlist-card-layout">
-                    <div class="playlist-header" style="border-bottom: 1px solid var(--color-border); padding-bottom: 1.25rem; margin-bottom: 1.25rem;">
-                        <div class="playlist-info">
-                            <h2 style="font-size: 1.5rem; font-weight: 700; color: white; display: flex; align-items: center; gap: 0.5rem;">
-                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-primary)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="11" cy="11" r="8"></circle>
-                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                                </svg>
-                                <span>Select the Correct Song</span>
-                            </h2>
-                            <p class="playlist-meta-info" style="margin-top: 0.35rem; font-size: 0.88rem; color: var(--color-text-muted);">
-                                We found multiple matches. Please verify the artist/author and select the correct song to preview and download.
-                            </p>
-                        </div>
-                    </div>
-                    <div class="playlist-tracks-container">
-                        <div id="search-options-list" class="playlist-tracks-list">
-                            <!-- Search options dynamically added here -->
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-
-            <!-- Playlist Result Card -->
-            <section id="playlist-result" class="result-section hidden">
-                <div class="song-card playlist-card-layout">
-                    <!-- Playlist Header -->
-                    <div class="playlist-header">
-                        <div class="playlist-cover-container">
-                            <img id="playlist-cover" src="" alt="Playlist Cover">
-                            <div class="cover-overlay"></div>
-                        </div>
-                        <div class="playlist-info">
-                            <h2 id="playlist-title">Playlist Name</h2>
-                            <h3 id="playlist-curator">Curator Name</h3>
-                            <p class="playlist-meta-info">
-                                <span id="playlist-track-count">0 tracks</span>
-                            </p>
-                            <div class="download-container">
-                                <button id="download-all-btn" class="download-btn">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                        <polyline points="7 10 12 15 17 10"></polyline>
-                                        <line x1="12" y1="15" x2="12" y2="3"></line>
-                                    </svg>
-                                    <span>Download All Tracks</span>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Playlist Progress bar -->
-                    <div id="playlist-progress-bar-container" class="playlist-progress-bar-container hidden">
-                        <div class="progress-info">
-                            <span id="playlist-progress-status">Downloading playlist tracks...</span>
-                            <span id="playlist-progress-percent">0/0</span>
-                        </div>
-                        <div class="progress-bar-container">
-                            <div id="playlist-progress-fill" class="progress-bar-fill"></div>
-                        </div>
-                    </div>
-
-                    <!-- Playlist Tracks list -->
-                    <div class="playlist-tracks-container">
-                        <div class="playlist-tracks-header">
-                            <span>Track Details</span>
-                            <span style="text-align: right;">Action</span>
-                        </div>
-                        <div id="playlist-tracks-list" class="playlist-tracks-list">
-                            <!-- Tracks dynamically added here -->
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Error State -->
-            <section id="error-card" class="error-section hidden">
-                <div class="error-icon">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="12" y1="8" x2="12" y2="12"></line>
-                        <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        <!-- Gateway Dashboard -->
+        <main class="gateway-grid">
+            <!-- SongFetch Card -->
+            <a href="/songfetch.html" class="gateway-card songfetch-card">
+                <div class="card-glow"></div>
+                <div class="card-icon-container">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 18V5l12-2v13"></path>
+                        <circle cx="6" cy="18" r="3"></circle>
+                        <circle cx="18" cy="16" r="3"></circle>
                     </svg>
                 </div>
-                <p id="error-message">Failed to retrieve song details. Check your connection and try again.</p>
-            </section>
+                <h2>SongFetch</h2>
+                <p class="card-desc">Download high-quality tagged MP3 tracks with embedded cover art and Genius lyrics.</p>
+                <div class="supported-platforms">
+                    <span>Spotify</span>
+                    <span>YouTube</span>
+                    <span>SoundCloud</span>
+                </div>
+                <div class="card-action-btn">
+                    <span>Open MP3 Downloader</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
+                </div>
+            </a>
+
+            <!-- VideoFetch Card -->
+            <a href="/videofetch.html" class="gateway-card videofetch-card">
+                <div class="card-glow"></div>
+                <div class="card-icon-container">
+                    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                    </svg>
+                </div>
+                <h2>VideoFetch</h2>
+                <p class="card-desc">Download high-quality, watermark-free videos with custom quality/resolution choices.</p>
+                <div class="supported-platforms">
+                    <span>YouTube (up to 4K)</span>
+                    <span>Instagram Reels</span>
+                    <span>TikTok Videos</span>
+                </div>
+                <div class="card-action-btn">
+                    <span>Open Video Downloader</span>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
+                </div>
+            </a>
         </main>
         
         <footer class="footer">
             <p>Made by WhooAre_you</p>
         </footer>
     </div>
-    
-    <!-- iOS Install Banner (shown on Safari only) -->
-    <div id="ios-install-banner" class="ios-install-banner hidden">
-        <div class="ios-banner-icon">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M9 18V5l12-2v13"></path>
-                <circle cx="6" cy="18" r="3"></circle>
-                <circle cx="18" cy="16" r="3"></circle>
-            </svg>
-        </div>
-        <div class="ios-banner-text">
-            <strong>Add SongFetch to Home Screen</strong>
-            <span>Tap <strong>Share</strong> then <strong>"Add to Home Screen"</strong> to install</span>
-        </div>
-        <button class="ios-banner-close" id="ios-banner-close" aria-label="Dismiss">✕</button>
-    </div>
-
-    <script src="app.js"></script>
 </body>
 </html>

@@ -226,124 +226,7 @@ async function resolveSpotifyTrack(url) {
   }
 }
 
-// Resolver: Apple Music Link
-async function resolveAppleMusicTrack(url) {
-  try {
-    console.log(`Resolving Apple Music URL: ${url}`);
-    // Extract song ID (typically 'i' param)
-    const urlObj = new URL(url);
-    let trackId = urlObj.searchParams.get('i');
-    
-    if (!trackId) {
-      // Fallback: parse last section of path if it's a numeric ID
-      const parts = urlObj.pathname.split('/');
-      const lastPart = parts[parts.length - 1];
-      if (/^\d+$/.test(lastPart)) {
-        trackId = lastPart;
-      }
-    }
 
-    if (trackId) {
-      const meta = await lookupiTunesId(trackId);
-      if (meta) return meta;
-    }
-
-    // Secondary fallback: Scrape title and search iTunes
-    const { data } = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-    const $ = cheerio.load(data);
-    const pageTitle = $('title').text().trim(); // "Song Name by Artist on Apple Music"
-    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-    const ogImage = $('meta[property="og:image"]').attr('content') || '';
-    
-    let title = ogTitle;
-    let artist = '';
-    
-    if (pageTitle.includes(' by ')) {
-      const parts = pageTitle.split(' by ');
-      title = title || parts[0].trim();
-      artist = parts[1].split(' on Apple Music')[0].trim();
-    }
-
-    if (title && artist) {
-      const cleanMeta = await searchiTunes(`${artist} ${title}`);
-      if (cleanMeta) return cleanMeta;
-    }
-
-    return {
-      title: title || 'Apple Music Song',
-      artist: artist || 'Unknown Artist',
-      album: 'Apple Music Single',
-      artwork: ogImage
-    };
-  } catch (error) {
-    console.error('Apple Music resolver error:', error.message);
-    throw new Error('Failed to resolve Apple Music track metadata');
-  }
-}
-
-// Resolver: Anghami Link
-async function resolveAnghamiTrack(url) {
-  try {
-    console.log(`Resolving Anghami URL via curl: ${url}`);
-    
-    // Command to execute curl with decompression and full headers
-    const cmd = `curl -sL --compressed -H "Accept-Encoding: gzip, deflate, br" -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8" -H "Accept-Language: en-US,en;q=0.5" "${url}"`;
-    
-    const html = await new Promise((resolve, reject) => {
-      exec(cmd, { maxBuffer: 1024 * 1024 * 10 }, (error, stdout, stderr) => {
-        if (error) reject(error);
-        else resolve(stdout);
-      });
-    });
-
-    const $ = cheerio.load(html);
-    const ogTitle = $('meta[property="og:title"]').attr('content') || '';
-    const ogDesc = $('meta[property="og:description"]').attr('content') || '';
-    const ogImage = $('meta[property="og:image"]').attr('content') || '';
-    
-    let title = ogTitle;
-    let artist = '';
-
-    if (ogTitle.includes(' - ')) {
-      const parts = ogTitle.split(' - ');
-      title = parts[0].trim();
-      artist = parts[1].trim();
-    } else if (ogTitle.includes(' by ')) {
-      const parts = ogTitle.split(' by ');
-      title = parts[0].trim();
-      artist = parts[1].trim();
-    } else if (ogDesc && ogDesc.includes(' · ')) {
-      const parts = ogDesc.split(' · ');
-      artist = parts[0].trim();
-      title = ogTitle || '';
-    } else {
-      const match = ogDesc.match(/Listen to (.*?) by (.*?) on Anghami/i);
-      if (match) {
-        title = match[1].trim();
-        artist = match[2].trim();
-      }
-    }
-
-    if (title && artist) {
-      const cleanMeta = await searchiTunes(`${artist} ${title}`);
-      if (cleanMeta) return cleanMeta;
-    }
-
-    return {
-      title: title || ogTitle || 'Anghami Song',
-      artist: artist || 'Unknown Artist',
-      album: 'Anghami Single',
-      artwork: ogImage
-    };
-  } catch (error) {
-    console.error('Anghami resolver error:', error.message);
-    throw new Error('Failed to resolve Anghami track metadata');
-  }
-}
 
 // Resolver: YouTube Link
 async function resolveYouTubeTrack(url) {
@@ -578,13 +461,6 @@ app.post('/api/search', async (req, res) => {
           return res.status(400).json({ error: 'Spotify playlists are not supported. Please paste individual Spotify track links, or search by song name.' });
         }
         metadata = await resolveSpotifyTrack(queryOrUrl);
-      } else if (queryOrUrl.includes('music.apple.com')) {
-        if (queryOrUrl.includes('/playlist/')) {
-          throw new Error('Apple Music playlists cannot be resolved. Please download individual tracks or search by name.');
-        }
-        metadata = await resolveAppleMusicTrack(queryOrUrl);
-      } else if (queryOrUrl.includes('anghami.com')) {
-        metadata = await resolveAnghamiTrack(queryOrUrl);
       } else if (queryOrUrl.includes('youtube.com') || queryOrUrl.includes('youtu.be')) {
         if (queryOrUrl.includes('list=') && (queryOrUrl.includes('/playlist') || queryOrUrl.includes('videoseries'))) {
           metadata = await resolveYouTubePlaylist(queryOrUrl);
@@ -598,7 +474,7 @@ app.post('/api/search', async (req, res) => {
           metadata = await resolveSoundCloudTrack(queryOrUrl);
         }
       } else {
-        return res.status(400).json({ error: 'Unsupported URL platform. Use Spotify, YouTube, Apple Music, Anghami, or SoundCloud.' });
+        return res.status(400).json({ error: 'Unsupported URL platform. Use Spotify, YouTube, or SoundCloud.' });
       }
     } else {
       if (resolveDirect) {
@@ -894,6 +770,326 @@ app.post('/api/download', async (req, res) => {
     if (fs.existsSync(finalMp3Path)) {
       fs.unlink(finalMp3Path, () => {});
     }
+  }
+});
+
+// ==========================================
+// VIDEOFETCH DOWNLOADER MODULE
+// ==========================================
+
+// Helper: Format duration from seconds to MM:SS
+function formatDuration(seconds) {
+  if (!seconds) return '0:00';
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  if (hrs > 0) {
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  }
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Helper: Format size in bytes to human readable string (KB, MB)
+function formatSize(bytes) {
+  if (!bytes) return 'Unknown size';
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+  return `${mb.toFixed(1)} MB`;
+}
+
+// Route: Serve SongFetch HTML page
+app.get('/songfetch', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'songfetch.html'));
+});
+
+// Route: Serve VideoFetch HTML page
+app.get('/videofetch', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'videofetch.html'));
+});
+
+// Route: Fetch estimated MP3 size for SongFetch
+app.post('/api/songfetch/size', async (req, res) => {
+  const { title, artist, youtubeUrl } = req.body;
+  
+  let downloadUrl = youtubeUrl;
+  if (!downloadUrl) {
+    if (!title || !artist) {
+      return res.json({ size: 'Unknown size' });
+    }
+    downloadUrl = `ytsearch1:${artist} - ${title} (Official Audio)`;
+  }
+
+  try {
+    const ytDlpBinary = await ensureYtDlp();
+    const args = [
+      '--js-runtimes', 'node',
+      '--impersonate', 'chrome',
+      '--no-cache-dir',
+      '-J',
+      '--no-playlist',
+      downloadUrl
+    ];
+
+    execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+      if (error) {
+        console.error('Failed to get song size:', error.message);
+        return res.json({ size: 'Unknown size' });
+      }
+
+      try {
+        const data = JSON.parse(stdout);
+        let size = 0;
+        let entries = data.entries ? data.entries[0] : data;
+        
+        if (entries && entries.formats) {
+          const audioFormats = entries.formats.filter(f => f.vcodec === 'none' && f.acodec !== 'none');
+          if (audioFormats.length > 0) {
+            audioFormats.sort((a, b) => (b.tbr || 0) - (a.tbr || 0));
+            size = audioFormats[0].filesize || audioFormats[0].filesize_approx || 0;
+          } else {
+            size = entries.filesize || entries.filesize_approx || 0;
+          }
+        }
+
+        res.json({ size: formatSize(size) });
+      } catch (parseErr) {
+        res.json({ size: 'Unknown size' });
+      }
+    });
+  } catch (err) {
+    res.json({ size: 'Unknown size' });
+  }
+});
+
+// Route: Fetch Video Info (metadata + available resolutions)
+app.post('/api/videofetch/info', async (req, res) => {
+  const { url } = req.body;
+  if (!url) {
+    return res.status(400).json({ error: 'URL is required' });
+  }
+
+  let platform = 'unknown';
+  const urlLower = url.toLowerCase();
+  if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be')) {
+    platform = 'youtube';
+  } else if (urlLower.includes('instagram.com')) {
+    platform = 'instagram';
+  } else if (urlLower.includes('tiktok.com')) {
+    platform = 'tiktok';
+  }
+
+  try {
+    const ytDlpBinary = await ensureYtDlp();
+    const args = [
+      '--js-runtimes', 'node',
+      '--impersonate', 'chrome',
+      '--no-cache-dir',
+      '-J',
+      '--no-playlist',
+      url
+    ];
+
+    console.log(`Fetching video metadata using yt-dlp for: ${url}`);
+    
+    execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+      if (error) {
+        console.error('yt-dlp metadata extraction failed:', error.message);
+        // Fallback response for TikTok / Instagram if they are rate-limited or blocked
+        if (platform === 'tiktok' || platform === 'instagram') {
+          console.log(`Using fallback metadata for platform: ${platform}`);
+          return res.json({
+            title: `Video from ${platform.charAt(0).toUpperCase() + platform.slice(1)}`,
+            thumbnail: '/favicon.svg',
+            duration: 'Unknown',
+            uploader: 'Uploader',
+            platform: platform,
+            formats: [{ height: 'best', size: 'Unknown size' }],
+            audioSize: 'Unknown size',
+            bestSize: 'Unknown size'
+          });
+        }
+        return res.status(500).json({ error: `Failed to retrieve video metadata. Details: ${error.message}` });
+      }
+
+      try {
+        const data = JSON.parse(stdout);
+        
+        // Find available resolutions for YouTube
+        const uniqueHeights = new Set();
+        if (data.formats) {
+          data.formats.forEach(f => {
+            if (f.height && f.vcodec !== 'none') {
+              uniqueHeights.add(f.height);
+            }
+          });
+        }
+        
+        // Filter standard heights
+        const resolutions = Array.from(uniqueHeights)
+          .filter(h => [144, 240, 360, 480, 720, 1080, 1440, 2160].includes(h))
+          .sort((a, b) => b - a);
+
+        // Find best audio size for YouTube estimates
+        let bestAudioSize = 0;
+        if (data.formats) {
+          const audioFormats = data.formats.filter(f => f.vcodec === 'none' && f.acodec !== 'none');
+          if (audioFormats.length > 0) {
+            audioFormats.sort((a, b) => (b.tbr || 0) - (a.tbr || 0));
+            bestAudioSize = audioFormats[0].filesize || audioFormats[0].filesize_approx || 0;
+          }
+        }
+
+        // Map resolutions to include their size estimation (video + audio)
+        const formatOptions = resolutions.map(h => {
+          let videoSize = 0;
+          if (data.formats) {
+            const videoForHeight = data.formats
+              .filter(f => f.height === h && f.vcodec !== 'none')
+              .sort((a, b) => (b.tbr || 0) - (a.tbr || 0));
+            if (videoForHeight.length > 0) {
+              videoSize = videoForHeight[0].filesize || videoForHeight[0].filesize_approx || 0;
+            }
+          }
+          const totalSize = videoSize ? (videoSize + bestAudioSize) : 0;
+          return {
+            height: h,
+            size: formatSize(totalSize)
+          };
+        });
+
+        // Best combined size estimation for other platforms
+        const bestFormat = data.formats ? data.formats.sort((a, b) => (b.tbr || 0) - (a.tbr || 0))[0] : null;
+        const bestSize = data.filesize || data.filesize_approx || (bestFormat ? (bestFormat.filesize || bestFormat.filesize_approx) : 0);
+
+        // Best thumbnail URL
+        let thumbnail = '/favicon.svg';
+        if (data.thumbnails && data.thumbnails.length > 0) {
+          thumbnail = data.thumbnails[data.thumbnails.length - 1].url;
+        } else if (data.thumbnail) {
+          thumbnail = data.thumbnail;
+        }
+
+        res.json({
+          title: data.title || 'Video',
+          thumbnail: thumbnail,
+          duration: formatDuration(data.duration),
+          uploader: data.uploader || data.channel || 'Unknown',
+          platform: platform,
+          formats: platform === 'youtube' ? formatOptions : [{ height: 'best', size: formatSize(bestSize) }],
+          audioSize: formatSize(bestAudioSize),
+          bestSize: formatSize(bestSize)
+        });
+      } catch (parseErr) {
+        console.error('Failed to parse metadata JSON:', parseErr.message);
+        res.status(500).json({ error: 'Failed to process metadata returned from downloader.' });
+      }
+    });
+  } catch (err) {
+    console.error('Metadata API error:', err.message);
+    res.status(500).json({ error: err.message || 'An error occurred fetching metadata' });
+  }
+});
+
+// Route: Download Video / Audio
+app.post('/api/videofetch/download', async (req, res) => {
+  const { url, quality, title } = req.body;
+  if (!url) {
+    return res.status(400).json({ error: 'URL is required' });
+  }
+
+  let platform = 'unknown';
+  const urlLower = url.toLowerCase();
+  if (urlLower.includes('youtube.com') || urlLower.includes('youtu.be')) {
+    platform = 'youtube';
+  } else if (urlLower.includes('instagram.com')) {
+    platform = 'instagram';
+  } else if (urlLower.includes('tiktok.com')) {
+    platform = 'tiktok';
+  }
+
+  const tempId = `video_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+  const ext = quality === 'audio' ? 'mp3' : 'mp4';
+  
+  try {
+    const ytDlpBinary = await ensureYtDlp();
+    const ffmpegDir = path.dirname(ffmpegPath);
+
+    console.log(`Starting video/audio download using yt-dlp for: ${url} (Quality: ${quality})`);
+
+    let args = [
+      '--js-runtimes', 'node',
+      '--impersonate', 'chrome',
+      '--no-cache-dir',
+      '--ffmpeg-location', ffmpegDir
+    ];
+
+    if (quality === 'audio') {
+      args.push(
+        '-x',
+        '--audio-format', 'mp3',
+        '--audio-quality', '0',
+        '-o', path.join(tempDir, `${tempId}.%(ext)s`)
+      );
+    } else {
+      let formatSelector = 'bestvideo+bestaudio/best';
+      if (platform === 'youtube' && quality && quality !== 'best') {
+        formatSelector = `bestvideo[height<=${quality}]+bestaudio/best`;
+      }
+      args.push(
+        '-f', formatSelector,
+        '--merge-output-format', 'mp4',
+        '-o', path.join(tempDir, `${tempId}.%(ext)s`)
+      );
+    }
+
+    args.push(url);
+
+    execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+      if (error) {
+        console.error('yt-dlp download failed:', error.message);
+        console.error('yt-dlp download stderr:', stderr);
+        return res.status(500).json({ error: `Download failed. Detail: ${error.message}` });
+      }
+
+      let finalFilePath = path.join(tempDir, `${tempId}.${ext}`);
+
+      // Verify file existence, and fallback to search by prefix if exact extension mismatch
+      if (!fs.existsSync(finalFilePath)) {
+        const files = fs.readdirSync(tempDir);
+        const matchedFile = files.find(f => f.startsWith(tempId));
+        if (matchedFile) {
+          finalFilePath = path.join(tempDir, matchedFile);
+        } else {
+          return res.status(500).json({ error: 'Downloaded file was not generated.' });
+        }
+      }
+
+      const safeFilename = `${title || 'video'}.${ext}`.replace(/[\\/:*?"<>|]/g, '_');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
+      res.setHeader('Content-Type', quality === 'audio' ? 'audio/mpeg' : 'video/mp4');
+
+      const fileStream = fs.createReadStream(finalFilePath);
+      fileStream.pipe(res);
+
+      fileStream.on('end', () => {
+        // Clean up temporary file after transmission is finished
+        fs.unlink(finalFilePath, (err) => {
+          if (err) console.error('Failed to delete temporary video file:', err.message);
+          else console.log(`Temporary file cleaned up: ${finalFilePath}`);
+        });
+      });
+
+      fileStream.on('error', (err) => {
+        console.error('Video file stream error:', err.message);
+        fs.unlink(finalFilePath, () => {});
+      });
+    });
+
+  } catch (err) {
+    console.error('Backend download route failed:', err.message);
+    res.status(500).json({ error: err.message || 'An error occurred during video download' });
   }
 });
 

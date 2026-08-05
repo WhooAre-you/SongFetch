@@ -17,8 +17,6 @@
     /* Platform Colors */
     --color-spotify: #1db954;
     --color-youtube: #ef4444;
-    --color-apple: #fa586a;
-    --color-anghami: #c026d3;
     --color-soundcloud: #ff5500;
     
     --radius-lg: 20px;
@@ -396,9 +394,8 @@ body {
 
 .platform.spotify .dot { background-color: var(--color-spotify); }
 .platform.youtube .dot { background-color: var(--color-youtube); }
-.platform.apple .dot { background-color: var(--color-apple); }
-.platform.anghami .dot { background-color: var(--color-anghami); }
 .platform.soundcloud .dot { background-color: var(--color-soundcloud); }
+
 
 /* Loader State */
 .loader-section {
@@ -1184,4 +1181,69 @@ body {
     flex-shrink: 0;
     margin-top: 1px;
 }
+
+/* ==========================================
+   SHARED NAVIGATION STYLES
+   ========================================== */
+.app-nav {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 2.2rem;
+    padding: 4px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.nav-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.15rem;
+    border-radius: 12px;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    font-family: var(--font-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: var(--transition-smooth);
+    cursor: pointer;
+}
+
+.nav-item svg {
+    opacity: 0.7;
+    transition: var(--transition-smooth);
+}
+
+.nav-item:hover {
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item:hover svg {
+    opacity: 1;
+}
+
+/* SongFetch active tab theme */
+.nav-item.active {
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    color: #a855f7;
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.15);
+}
+
+.song-filesize-text {
+    font-family: var(--font-secondary);
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    text-align: center;
+    margin-top: 0.65rem;
+    letter-spacing: 0.02em;
+}
+
 
