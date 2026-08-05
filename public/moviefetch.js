@@ -671,11 +671,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Download Movie Button Action - Direct Stream File Download
+    // Download Movie Button Action - Native Browser Stream Download (0% RAM overhead, direct to Downloads folder)
     downloadNowBtn.addEventListener('click', async () => {
         if (!selectedDownloadOption) return;
 
-        const subtitleLang = subtitlesSelect.value;
         const videoUrl = selectedDownloadOption.url || selectedDownloadOption.link || selectedDownloadOption.id;
         const movieTitleText = activeMovieTitle || 'movie';
 
@@ -684,50 +683,35 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        downloadNowBtn.disabled = true;
         downloadProgress.classList.remove('hidden');
         downloadProgress.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        updateProgressUI(15, 'Connecting to stream server and resolving video file...');
+        updateProgressUI(100, 'Direct file download started! Check your browser downloads bar.');
 
-        const safeFilename = `${movieTitleText.replace(/[\\/:*?"<>|]/g, '_')}.mp4`;
+        // Form POST trigger sends stream directly to Chrome download bar without RAM buffering
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/api/movies/download';
+        form.style.display = 'none';
 
-        try {
-            const response = await fetch('/api/movies/download', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    downloadUrl: videoUrl,
-                    subtitleLang: subtitleLang,
-                    title: movieTitleText
-                })
-            });
+        const inputUrl = document.createElement('input');
+        inputUrl.type = 'hidden';
+        inputUrl.name = 'downloadUrl';
+        inputUrl.value = videoUrl;
 
-            if (response.ok) {
-                updateProgressUI(60, 'Streaming video track directly to your device...');
-                const blob = await response.blob();
-                const blobUrl = window.URL.createObjectURL(blob);
-                const saveLink = document.createElement('a');
-                saveLink.href = blobUrl;
-                saveLink.download = safeFilename;
-                document.body.appendChild(saveLink);
-                saveLink.click();
-                saveLink.remove();
-                window.URL.revokeObjectURL(blobUrl);
-                updateProgressUI(100, 'Direct file download complete! Saved to your Downloads folder.');
-            } else {
-                const errData = await response.json().catch(() => ({}));
-                const errMsg = errData.error || 'تنبيه: سيرفر التنزيل هذا غير متاح حالياً. يرجى اختيار سيرفر آخر مثل (VidTube أو UpDown أو Mdiaload) من الجدول أعلاه.';
-                showError(errMsg);
-                updateProgressUI(0, errMsg);
-            }
-        } catch (err) {
-            console.error(err);
-            const errMsg = err.message || 'تنبيه: تعذر التنزيل من هذا السيرفر. اختر سيرفر آخر من الجدول أعلاه.';
-            showError(errMsg);
-            updateProgressUI(0, errMsg);
-        } finally {
-            downloadNowBtn.disabled = false;
-        }
+        const inputTitle = document.createElement('input');
+        inputTitle.type = 'hidden';
+        inputTitle.name = 'title';
+        inputTitle.value = movieTitleText;
+
+        form.appendChild(inputUrl);
+        form.appendChild(inputTitle);
+        document.body.appendChild(form);
+
+        form.submit();
+
+        setTimeout(() => {
+            form.remove();
+        }, 2000);
     });
 
     // Start with quickdiscover grid

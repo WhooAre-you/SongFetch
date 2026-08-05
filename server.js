@@ -1084,7 +1084,55 @@ app.post('/api/movies/info', async (req, res) => {
   }
 });
 
-// Route: MovieFetch download (proxying stream with validation against corrupt/dead links)
+// Route: Direct Movie Stream GET Endpoint for instant native browser file downloads (0% RAM overhead, no 60% hang)
+app.get('/api/movies/stream', async (req, res) => {
+  const { url: downloadUrl, title } = req.query;
+  if (!downloadUrl) return res.status(400).send('Download URL is required');
+
+  console.log(`Stream request received for: "${title}" => ${downloadUrl}`);
+
+  try {
+    let actualVideoUrl = downloadUrl;
+    actualVideoUrl = await arabicResolver.resolveDirectHosterMediaUrl(actualVideoUrl);
+    console.log(`[Server] Stream resolved direct media URL: ${actualVideoUrl}`);
+
+    const checkRes = await fetch(actualVideoUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    const contentType = checkRes.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      const text = await checkRes.text();
+      if (text.includes('copyright') || text.includes('removed') || text.includes('Notice !') || text.includes('404 Not Found')) {
+        return res.status(400).send('هذا السيرفر (BowFile) ملفه محذوف بسبب الحقوق أو غير متوفر حالياً. يرجى اختيار سيرفر آخر مثل (VidTube أو UpDown أو Mdiaload) من القائمة.');
+      }
+    }
+
+    const safeFilename = `${title || 'movie'}.mp4`.replace(/[\\/:*?"<>|]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
+    res.setHeader('Content-Type', 'video/mp4');
+
+    const downloadResponse = await axios({
+      url: actualVideoUrl,
+      method: 'GET',
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    downloadResponse.data.pipe(res);
+  } catch (err) {
+    console.error('Movie stream failed:', err.message);
+    if (!res.headersSent) {
+      res.status(500).send('تعذر تنزيل هذا السيرفر حالياً. يرجى اختيار سيرفر آخر مثل VidTube أو UpDown.');
+    }
+  }
+});
+
+// Route: MovieFetch download POST endpoint
 app.post('/api/movies/download', async (req, res) => {
   const { downloadUrl, title } = req.body;
   if (!downloadUrl) {
@@ -1100,11 +1148,9 @@ app.post('/api/movies/download', async (req, res) => {
       if (parsed.videoUrl) actualVideoUrl = parsed.videoUrl;
     } catch (e) {}
 
-    // Automatically resolve direct video stream URL from hosters (like VidTube, UpDown, etc.)
     actualVideoUrl = await arabicResolver.resolveDirectHosterMediaUrl(actualVideoUrl);
     console.log(`[Server] Resolved direct media stream URL: ${actualVideoUrl}`);
 
-    // First validate the URL to ensure it's not a dead hoster page (HTML 404/copyright error)
     const checkRes = await fetch(actualVideoUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
