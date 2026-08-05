@@ -937,8 +937,30 @@ app.get('/api/movies/search', async (req, res) => {
     const $ = cheerio.load(response.data);
 
     $('.Grid--WecimaPosts .GridItem').each((i, el) => {
-      const title = $(el).find('strong').text().trim() || $(el).find('.Thumb--GridItem').attr('title') || $(el).text().trim().split('\n')[0];
+      // Try to get the title from the most specific selectors first
+      let title = '';
+      const strongEl = $(el).find('strong').first();
+      if (strongEl.length) {
+        title = strongEl.text().trim();
+      }
+      if (!title) {
+        title = $(el).find('.Thumb--GridItem').attr('title') || '';
+      }
+      
       const link = $(el).find('a').attr('href');
+      
+      // If the title is too long (description leaked in), extract from URL slug instead
+      if (title.length > 120 && link) {
+        try {
+          const slug = decodeURIComponent(link).split('/').pop().replace(/-/g, ' ');
+          if (slug.length > 3) title = slug;
+        } catch (e) {}
+      }
+      
+      // Truncate to prevent description contamination
+      if (title.length > 120) {
+        title = title.substring(0, 120).trim();
+      }
       
       let img = '';
       const thumbEl = $(el).find('.Thumb--GridItem');

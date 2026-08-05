@@ -89,8 +89,16 @@ document.addEventListener('DOMContentLoaded', () => {
             year = yearMatch[1];
         }
 
+        // Strip common Arabic description/noise phrases before removing Arabic chars
+        let preClean = rawTitle
+            .replace(/مشاهدة وتحميل|مشاهدة|وتحميل|تحميل|مترجم|كامل|اون لاين|بجودة ممتازة|بجودة عالية|بجودة|ممتازة|عالية|مباشر|ممتعة|بدون إعلانات|إعلانات|أعجبني/g, '')
+            .replace(/يجمع بين.*$/g, '')  // Cut off description sentences
+            .replace(/على\s+\S+\s+سيما.*$/g, '')  // Cut off "على ماي سيما..."
+            .replace(/على موقع.*$/g, '')
+            .trim();
+
         // Remove Arabic characters
-        let titleClean = rawTitle.replace(/[\u0600-\u06FF]/g, ' ');
+        let titleClean = preClean.replace(/[\u0600-\u06FF]/g, ' ');
 
         // Remove common movie metadata noise
         const keywordsToRemove = [
@@ -111,12 +119,24 @@ document.addEventListener('DOMContentLoaded', () => {
                                .replace(/\s+/g, ' ')
                                .trim();
 
-        // Fallback: If no English words remain, clean WeCima tags out of Arabic title
+        // Fallback: If no English words remain, try to extract name from Arabic title
         if (!titleClean || titleClean.length < 3) {
-            titleClean = rawTitle.replace(/مشاهدة|تحميل|كامل|مترجم|اون لاين|بجودة|عالية|فيلم|مسلسل|حلقة|موسم|علي|موقع|وي سيما|ماي سيما|أعجبني/g, '')
-                                  .replace(/[()\-:\[\]]/g, ' ')
-                                  .replace(/\s+/g, ' ')
-                                  .trim();
+            // Try to extract just the core Arabic movie name (before any description)
+            let arabicClean = rawTitle.replace(/مشاهدة|تحميل|كامل|مترجم|اون لاين|بجودة|عالية|فيلم|مسلسل|حلقة|موسم|على|علي|موقع|وي سيما|ماي سيما|أعجبني|ممتازة|مباشر|ممتعة|بدون|إعلانات|يجمع|بين|الكوميديا|الدراما|الاكشن|و\b/g, '')
+                                      .replace(/[()\-:\[\]]/g, ' ')
+                                      .replace(/\b\d{4}\b/g, ' ')
+                                      .replace(/\s+/g, ' ')
+                                      .trim();
+            // If still too long, take just the first few words
+            if (arabicClean.length > 50) {
+                arabicClean = arabicClean.split(/\s+/).slice(0, 5).join(' ');
+            }
+            titleClean = arabicClean;
+        }
+
+        // Safety cap: if the title is still unreasonably long, truncate
+        if (titleClean.length > 60) {
+            titleClean = titleClean.substring(0, 60).trim();
         }
 
         if (year && !titleClean.includes(year)) {
