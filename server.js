@@ -937,17 +937,9 @@ app.get('/api/movies/search', async (req, res) => {
     const $ = cheerio.load(response.data);
 
     $('.Grid--WecimaPosts .GridItem').each((i, el) => {
-      // Try to get the title from the most specific selectors first
-      let title = '';
-      const strongEl = $(el).find('strong').first();
-      if (strongEl.length) {
-        title = strongEl.text().trim();
-      }
-      if (!title) {
-        title = $(el).find('.Thumb--GridItem').attr('title') || '';
-      }
-      
-      const link = $(el).find('a').attr('href');
+      const aEl = $(el).find('.Thumb--GridItem a');
+      let title = aEl.attr('title') || $(el).find('[itemprop="name"]').text().trim() || '';
+      const link = aEl.attr('href') || $(el).find('a').first().attr('href');
       
       // If the title is too long (description leaked in), extract from URL slug instead
       if (title.length > 120 && link) {
@@ -962,14 +954,17 @@ app.get('/api/movies/search', async (req, res) => {
         title = title.substring(0, 120).trim();
       }
       
-      let img = '';
-      const thumbEl = $(el).find('.Thumb--GridItem');
-      if (thumbEl.attr('style')) {
-        const style = thumbEl.attr('style');
-        const match = style.match(/url\(['"]?(.*?)['"]?\)/);
-        if (match) img = match[1];
+      let img = $(el).find('.BG--GridItem').attr('data-src') || '';
+      if (!img) {
+        const bgStyle = $(el).find('.BG--GridItem').attr('style');
+        if (bgStyle) {
+          const match = bgStyle.match(/url\(['"]?(.*?)['"]?\)/);
+          if (match) img = match[1];
+        }
       }
-      if (!img) img = $(el).find('img').attr('src') || '';
+      if (!img) {
+        img = $(el).find('img').attr('src') || '';
+      }
       if (img && img.startsWith('//')) {
         img = 'https:' + img;
       }
