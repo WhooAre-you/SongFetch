@@ -499,7 +499,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     const epText = ep.text || '';
                     const epMatch = epText.match(/(?:حلقة|الحلقة|Episode)\s*(\d+)/i);
                     const epNum = epMatch ? parseInt(epMatch[1]) : (idx + 1);
-                    let epLabel = epMatch ? `Ep. ${epNum}` : (epText.replace(/[\u0600-\u06FF]/g, '').trim() || `Ep. ${idx + 1}`);
+                    // Always use "Ep. N" format — never strip to raw English noise like "HD"
+                    const epLabel = `Ep. ${epNum}`;
                     return { ...ep, epNum, epLabel };
                 });
 
@@ -558,14 +559,51 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadNowBtn.disabled = true;
 
         try {
-            const res = await fetch('/api/movies/info', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: epUrl })
-            });
-            if (!res.ok) throw new Error();
-            const data = await res.json();
-            
+            let data;
+            const isArabicEpisode = epUrl && (
+                epUrl.includes('prstej.net') ||
+                epUrl.includes('wecima') ||
+                epUrl.includes('topcinemaa') ||
+                epUrl.includes('movizland') ||
+                epUrl.includes('qfilm.vip')
+            );
+
+            if (isArabicEpisode) {
+                // Route Arabic episode pages through arabic resolver
+                const res = await fetch('/api/arabic/resolve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: epUrl, title: epTitle, source: 'Prestige' })
+                });
+                if (!res.ok) throw new Error();
+                data = await res.json();
+
+                // Prestige serves video via BiBplayer (JS-loaded), so if no direct
+                // download links were scraped, offer the episode watch page as stream server
+                if (!data.downloads || data.downloads.length === 0) {
+                    // Extract embed_url from pm_video_data pattern in URL (vid=XXX)
+                    const vidMatch = epUrl.match(/vid=([a-z0-9]+)/i);
+                    const embedUrl = vidMatch
+                        ? `https://a.prstej.net/embed.php?vid=${vidMatch[1]}`
+                        : epUrl;
+
+                    data.downloads = [{
+                        quality: 'HD Stream (Prestige Player)',
+                        url: embedUrl,
+                        host: 'a.prstej.net',
+                        size: 'Stream'
+                    }];
+                }
+            } else {
+                const res = await fetch('/api/movies/info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: epUrl })
+                });
+                if (!res.ok) throw new Error();
+                data = await res.json();
+            }
+
             renderQualitiesTable(data.downloads);
         } catch (e) {
             qualitiesList.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#f43f5e;">Failed to load server qualities for this episode.</td></tr>`;
