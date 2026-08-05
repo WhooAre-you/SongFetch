@@ -24,6 +24,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressStatus = document.getElementById('progress-status');
     const progressPercent = document.getElementById('progress-percent');
     const progressFill = document.getElementById('progress-fill');
+    const songFilesize = document.getElementById('song-filesize');
 
     // Playlist elements
     const playlistResult = document.getElementById('playlist-result');
@@ -100,6 +101,9 @@ document.addEventListener('DOMContentLoaded', () => {
         playlistTracksList.innerHTML = '';
         searchOptionsList.innerHTML = '';
         downloadAllBtn.disabled = false;
+        if (songFilesize) {
+            songFilesize.textContent = '';
+        }
     }
 
     // Update progress bar UI
@@ -107,6 +111,32 @@ document.addEventListener('DOMContentLoaded', () => {
         progressFill.style.width = `${percent}%`;
         progressPercent.textContent = `${percent}%`;
         progressStatus.textContent = status;
+    }
+
+    // Fetch and display estimated song file size
+    async function fetchAndDisplaySongSize(songData) {
+        if (!songFilesize || !songData) return;
+        songFilesize.textContent = 'Estimating file size...';
+        try {
+            const response = await fetch('/api/songfetch/size', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    title: songData.title,
+                    artist: songData.artist,
+                    youtubeUrl: songData.youtubeUrl
+                })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                songFilesize.textContent = `Estimated size: ${data.size}`;
+            } else {
+                songFilesize.textContent = 'Estimated size: Unknown';
+            }
+        } catch (error) {
+            console.error('Failed to fetch song size:', error);
+            songFilesize.textContent = 'Estimated size: Unknown';
+        }
     }
 
     // Handle Form Submit (Search/Parse)
@@ -274,6 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Show result section
                 resultSection.classList.remove('hidden');
+                fetchAndDisplaySongSize(currentSongData);
             }
 
         } catch (error) {
@@ -446,6 +477,7 @@ document.addEventListener('DOMContentLoaded', () => {
             downloadProgress.classList.add('hidden');
 
             resultSection.classList.remove('hidden');
+            fetchAndDisplaySongSize(currentSongData);
 
             // Smoothly scroll to the result card
             resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });

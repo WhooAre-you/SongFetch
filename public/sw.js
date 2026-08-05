@@ -1,10 +1,18 @@
-const CACHE_NAME = 'songfetch-v1';
+const CACHE_NAME = 'songfetch-v3';
 const ASSETS = [
   '/',
   '/index.html',
   '/style.css',
   '/app.js',
-  '/manifest.json'
+  '/manifest.json',
+  '/videofetch.html',
+  '/videofetch.css',
+  '/videofetch.js',
+  '/songfetch.html',
+  '/omnifetch.css',
+  '/moviefetch.html',
+  '/moviefetch.css',
+  '/moviefetch.js'
 ];
 
 self.addEventListener('install', (e) => {

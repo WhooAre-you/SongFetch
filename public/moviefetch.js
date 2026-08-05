@@ -1,0 +1,704 @@
+document.addEventListener('DOMContentLoaded', () => {
+    // Search Form & Layout Elements
+    const searchForm = document.getElementById('search-form');
+    const searchInput = document.getElementById('search-input');
+    const clearBtn = document.getElementById('clear-btn');
+    const loader = document.getElementById('loader');
+    const loaderText = document.getElementById('loader-text');
+    const trendingSection = document.getElementById('trending-section');
+    const trendingGrid = document.getElementById('trending-grid');
+    const sectionTitle = document.querySelector('.trending-section .section-title');
+    const resultSection = document.getElementById('result');
+    const errorCard = document.getElementById('error-card');
+    const errorMessage = document.getElementById('error-message');
+
+    // Movie Details Elements
+    const moviePoster = document.getElementById('movie-poster');
+    const movieYear = document.getElementById('movie-year');
+    const movieTypeBadge = document.getElementById('movie-type-badge');
+    const movieRating = document.getElementById('movie-rating');
+    const movieTitle = document.getElementById('movie-title');
+    const movieDirector = document.getElementById('movie-director');
+    const movieGenre = document.getElementById('movie-genre');
+    const moviePlot = document.getElementById('movie-plot');
+
+    // TV Series Selection Elements
+    const tvSelectorContainer = document.getElementById('tv-selector-container');
+    const seasonSelect = document.getElementById('season-select');
+    const episodeSelect = document.getElementById('episode-select');
+    const episodesGrid = document.getElementById('episodes-grid');
+
+    // Download Configuration Elements
+    const qualitiesList = document.getElementById('qualities-list');
+    const subtitlesSelect = document.getElementById('subtitles-select');
+    const summaryTitle = document.getElementById('summary-title');
+    const summarySize = document.getElementById('summary-size');
+    const downloadNowBtn = document.getElementById('download-now-btn');
+    
+    // Progress Elements
+    const playerArea = document.getElementById('player-area');
+    const downloadProgress = document.getElementById('download-progress');
+    const progressStatus = document.getElementById('progress-status');
+    const progressPercent = document.getElementById('progress-percent');
+    const progressFill = document.getElementById('progress-fill');
+
+    // State Variables
+    let activeMovieTitle = '';
+    let selectedDownloadOption = null;
+    let currentSearchResults = [];
+    let activeFilter = 'all';
+
+    // Quick Search Thematic Movie Data
+    const quickTrending = [
+        {
+            title: "Inception",
+            year: "2010",
+            type: "Movie",
+            rating: "★ 8.8",
+            poster: "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=500&auto=format&fit=crop&q=80"
+        },
+        {
+            title: "Interstellar",
+            year: "2014",
+            type: "Movie",
+            rating: "★ 8.7",
+            poster: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=500&auto=format&fit=crop&q=80"
+        },
+        {
+            title: "The Dark Knight",
+            year: "2008",
+            type: "Movie",
+            rating: "★ 9.0",
+            poster: "https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=500&auto=format&fit=crop&q=80"
+        },
+        {
+            title: "House of the Dragon",
+            year: "2022",
+            type: "TV Series",
+            rating: "★ 8.5",
+            poster: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500&auto=format&fit=crop&q=80"
+        }
+    ];
+
+    // Helper: Clean and simplify titles to English Name + Date
+    function cleanTitle(rawTitle) {
+        // Extract year
+        let year = '';
+        const yearMatch = rawTitle.match(/\b(19\d\d|20\d\d)\b/);
+        if (yearMatch) {
+            year = yearMatch[1];
+        }
+
+        // Remove Arabic characters
+        let titleClean = rawTitle.replace(/[\u0600-\u06FF]/g, ' ');
+
+        // Remove common movie metadata noise
+        const keywordsToRemove = [
+            'watch', 'download', 'full', 'hd', 'bluray', 'web-dl', '1080p', '720p', '480p', 
+            'mkv', 'mp4', 'avi', 'yify', 'yts', 'quality', 'resolution', 'server', 'direct',
+            'season', 'episode', 'halkat', 'halqa', 'mutarjam', 'arabic', 'english', 'complete',
+            'series', 'movie', 'film', 'show', 'episodes', 'seasons', 'translated'
+        ];
+        
+        keywordsToRemove.forEach(kw => {
+            const regex = new RegExp(`\\b${kw}\\b`, 'gi');
+            titleClean = titleClean.replace(regex, ' ');
+        });
+
+        // Remove brackets, parentheses, colons, hyphens, and isolated years
+        titleClean = titleClean.replace(/[()\-:\[\]]/g, ' ')
+                               .replace(/\b\d{4}\b/g, ' ')
+                               .replace(/\s+/g, ' ')
+                               .trim();
+
+        // Fallback: If no English words remain, clean WeCima tags out of Arabic title
+        if (!titleClean || titleClean.length < 3) {
+            titleClean = rawTitle.replace(/مشاهدة|تحميل|كامل|مترجم|اون لاين|بجودة|عالية|فيلم|مسلسل|حلقة|موسم|علي|موقع|وي سيما|ماي سيما|أعجبني/g, '')
+                                  .replace(/[()\-:\[\]]/g, ' ')
+                                  .replace(/\s+/g, ' ')
+                                  .trim();
+        }
+
+        if (year && !titleClean.includes(year)) {
+            return `${titleClean} (${year})`;
+        }
+        return titleClean;
+    }
+
+    // Initialize Quick Discover Grid
+    function initQuickTrending() {
+        sectionTitle.textContent = "Trending Discoveries";
+        trendingGrid.innerHTML = '';
+        currentSearchResults = [];
+
+        quickTrending.forEach(movie => {
+            const card = document.createElement('div');
+            card.className = 'trending-card';
+            card.innerHTML = `
+                <div class="trending-poster-wrapper">
+                    <img src="${movie.poster}" alt="${movie.title}">
+                    <span class="trending-rating-badge">${movie.rating}</span>
+                </div>
+                <div class="trending-info">
+                    <h4>${movie.title}</h4>
+                    <p>${movie.year} • ${movie.type}</p>
+                </div>
+            `;
+            
+            card.addEventListener('click', () => {
+                searchInput.value = movie.title;
+                clearBtn.classList.remove('hidden');
+                triggerSearch(movie.title);
+            });
+
+            trendingGrid.appendChild(card);
+        });
+    }
+
+    // Helper: Classify result items as movie or series
+    function classifyItemType(item) {
+        const title = item.title.toLowerCase();
+        const url = item.link.toLowerCase();
+        
+        if (url.includes('/movie/') || title.includes('فيلم')) {
+            return 'movie';
+        }
+        if (url.includes('/series/') || url.includes('/episode/') || title.includes('مسلسل') || title.includes('حلقة') || title.includes('موسم')) {
+            return 'series';
+        }
+        return 'movie'; // fallback
+    }
+
+    // Wire up filter pills
+    const filterTabs = document.querySelectorAll('.filter-tab');
+    filterTabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            filterTabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            activeFilter = tab.getAttribute('data-filter');
+            renderSearchResults();
+        });
+    });
+
+    // Show/hide clear button on input
+    searchInput.addEventListener('input', () => {
+        if (searchInput.value.trim().length > 0) {
+            clearBtn.classList.remove('hidden');
+        } else {
+            clearBtn.classList.add('hidden');
+        }
+    });
+
+    // Clear input handler
+    clearBtn.addEventListener('click', () => {
+        searchInput.value = '';
+        clearBtn.classList.add('hidden');
+        searchInput.focus();
+        initQuickTrending();
+    });
+
+    // Reset UI states before a new search
+    function resetUI() {
+        loader.classList.add('hidden');
+        resultSection.classList.add('hidden');
+        errorCard.classList.add('hidden');
+        tvSelectorContainer.classList.add('hidden');
+        downloadProgress.classList.add('hidden');
+        downloadNowBtn.disabled = true;
+        
+        summaryTitle.textContent = '-';
+        summarySize.textContent = '-';
+        progressFill.style.width = '0%';
+        progressPercent.textContent = '0%';
+        selectedDownloadOption = null;
+    }
+
+    // Display error message
+    function showError(message) {
+        resetUI();
+        errorMessage.textContent = message;
+        errorCard.classList.remove('hidden');
+        errorCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Update download progress UI
+    function updateProgressUI(percent, status) {
+        progressFill.style.width = `${percent}%`;
+        progressPercent.textContent = `${percent}%`;
+        progressStatus.textContent = status;
+    }
+
+    // Search Trigger (queries search API with Akwam + WeCima)
+    async function triggerSearch(query) {
+        resetUI();
+        loaderText.textContent = `Searching cinema archives for "${query}"...`;
+        loader.classList.remove('hidden');
+
+        try {
+            const res = await fetch(`/api/movies/search?q=${encodeURIComponent(query)}`);
+            if (!res.ok) throw new Error('Search request failed.');
+            const data = await res.json();
+
+            loader.classList.add('hidden');
+
+            if (!data.results || data.results.length === 0) {
+                showError(`No movie or series found matching "${query}". Try another title.`);
+                return;
+            }
+
+            // Save results and trigger render
+            sectionTitle.textContent = `Search Results for "${query}"`;
+            currentSearchResults = data.results;
+            renderSearchResults();
+
+        } catch (err) {
+            console.error(err);
+            showError(err.message || 'An error occurred during search.');
+        }
+    }
+
+    // Render search results based on active filters
+    function renderSearchResults() {
+        trendingGrid.innerHTML = '';
+
+        if (currentSearchResults.length === 0) return;
+
+        const filtered = currentSearchResults.filter(item => {
+            const type = classifyItemType(item);
+            if (activeFilter === 'all') return true;
+            return type === activeFilter;
+        });
+
+        if (filtered.length === 0) {
+            trendingGrid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: var(--color-text-muted); padding: 3rem; font-family: var(--font-secondary); font-size: 0.9rem;">No matching ${activeFilter === 'movie' ? 'movies' : 'TV series'} found.</div>`;
+            return;
+        }
+
+        filtered.forEach(item => {
+            const card = document.createElement('div');
+            card.className = 'trending-card';
+            
+            // Set default poster placeholder if empty
+            const posterUrl = item.img || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80';
+            const sourceName = item.source || 'WeCima';
+            const sourceColor = sourceName === 'Akwam' ? 'rgba(59, 130, 246, 0.85)' : 'rgba(234, 179, 8, 0.85)';
+            const simplifiedTitle = cleanTitle(item.title);
+
+            card.innerHTML = `
+                <div class="trending-poster-wrapper">
+                    <img src="${posterUrl}" alt="${simplifiedTitle}">
+                    <span class="source-badge" style="background: ${sourceColor};">${sourceName}</span>
+                </div>
+                <div class="trending-info">
+                    <h4>${simplifiedTitle}</h4>
+                    <p>${sourceName} Media Index</p>
+                </div>
+            `;
+
+            card.addEventListener('click', () => {
+                loadWatchDetails(item);
+            });
+
+            trendingGrid.appendChild(card);
+        });
+    }
+
+    // Load watch details
+    async function loadWatchDetails(item) {
+        resetUI();
+        const sourceName = item.source || 'WeCima';
+        loaderText.textContent = `Resolving ${sourceName} source listings for "${item.title}"...`;
+        loader.classList.remove('hidden');
+
+        try {
+            const res = await fetch('/api/movies/info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: item.link })
+            });
+
+            if (!res.ok) throw new Error(`Failed to parse details page from ${sourceName}.`);
+            const data = await res.json();
+            
+            loader.classList.add('hidden');
+            let simplifiedTitle = cleanTitle(item.title);
+
+            // For TV series, extract season info from raw title or URL and append it
+            if (classifyItemType(item) === 'series') {
+                const arabicOrdinals = { 'الاول': 1, 'الأول': 1, 'الاولى': 1, 'الثاني': 2, 'الثانى': 2, 'الثانية': 2, 'الثالث': 3, 'الثالثة': 3, 'الرابع': 4, 'الرابعة': 4, 'الخامس': 5, 'الخامسة': 5, 'السادس': 6, 'السادسة': 6, 'السابع': 7, 'السابعة': 7, 'الثامن': 8, 'الثامنة': 8, 'التاسع': 9, 'التاسعة': 9, 'العاشر': 10, 'العاشرة': 10 };
+                let seasonNum = null;
+
+                // Try extracting from title text (Arabic ordinals)
+                const seasonMatch = item.title.match(/(?:الموسم|موسم)\s+(\S+)/);
+                if (seasonMatch) {
+                    seasonNum = arabicOrdinals[seasonMatch[1]] || parseInt(seasonMatch[1]) || null;
+                }
+
+                // Try English "Season X" pattern
+                if (!seasonNum) {
+                    const engMatch = item.title.match(/Season\s*(\d+)/i);
+                    if (engMatch) seasonNum = parseInt(engMatch[1]);
+                }
+
+                // Try extracting from URL path (e.g. "الموسم-الرابع" in URL slug)
+                if (!seasonNum && item.link) {
+                    const urlDecoded = decodeURIComponent(item.link);
+                    const urlSeasonMatch = urlDecoded.match(/الموسم[- ](\S+)/);
+                    if (urlSeasonMatch) {
+                        const cleaned = urlSeasonMatch[1].replace(/-/g, '');
+                        seasonNum = arabicOrdinals[cleaned] || parseInt(cleaned) || null;
+                    }
+                }
+
+                if (seasonNum) {
+                    simplifiedTitle += ` - Season ${seasonNum}`;
+                }
+            }
+
+            activeMovieTitle = simplifiedTitle;
+
+            // Basic metadata displays
+            moviePoster.src = item.img || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80';
+            movieTitle.textContent = simplifiedTitle;
+            summaryTitle.textContent = simplifiedTitle;
+            
+            // Extract clean title name and year for styling
+            let year = '2026';
+            const yearMatch = item.title.match(/\b(19\d\d|20\d\d)\b/);
+            if (yearMatch) year = yearMatch[1];
+            movieYear.textContent = year;
+
+            // Set default descriptions
+            movieDirector.textContent = `${sourceName} Provider`;
+            movieGenre.textContent = classifyItemType(item) === 'movie' ? 'Movie' : 'TV Show';
+            movieTypeBadge.textContent = classifyItemType(item) === 'series' ? 'TV SERIES' : 'MOVIE';
+            movieRating.textContent = sourceName === 'Akwam' ? '★ 8.2' : '★ 7.8';
+            moviePlot.textContent = `Media sources scraped directly from ${sourceName}. Select your preferred resolution and download quality below to fetch the video file. Optional subtitles can be multiplexed directly into the final container.`;
+
+            // Search metadata helpers to fill in premium English plot/genre details
+            if (classifyItemType(item) === 'series') {
+                await queryTVmazeMetadata(item.title);
+            } else {
+                await queryEnglishMetadata(item.title);
+            }
+
+            if (data.type === 'series') {
+                // Populate TV series selector grid (Netflix style circular/pill buttons)
+                tvSelectorContainer.classList.remove('hidden');
+                episodesGrid.innerHTML = '';
+
+                // Parse episode numbers and sort numerically
+                const parsedEpisodes = data.episodes.map((ep, idx) => {
+                    const epMatch = ep.text.match(/(?:حلقة|الحلقة|Episode)\s*(\d+)/i);
+                    const epNum = epMatch ? parseInt(epMatch[1]) : (idx + 1);
+                    let epLabel = epMatch ? `Ep. ${epNum}` : ep.text.replace(/[\u0600-\u06FF]/g, '').replace(/\s+/g, ' ').trim() || `Ep. ${idx + 1}`;
+                    return { ...ep, epNum, epLabel };
+                });
+
+                // Sort by episode number ascending
+                parsedEpisodes.sort((a, b) => a.epNum - b.epNum);
+
+                // Deduplicate by episode number (keep first occurrence)
+                const seen = new Set();
+                const uniqueEpisodes = parsedEpisodes.filter(ep => {
+                    if (seen.has(ep.epNum)) return false;
+                    seen.add(ep.epNum);
+                    return true;
+                });
+
+                uniqueEpisodes.forEach(ep => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'episode-btn';
+                    btn.textContent = ep.epLabel;
+                    btn.title = ep.text;
+
+                    btn.addEventListener('click', () => {
+                        document.querySelectorAll('.episode-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        
+                        const fullTitle = `${simplifiedTitle} - ${ep.epLabel}`;
+                        loadQualitiesList(ep.link, fullTitle);
+                    });
+
+                    episodesGrid.appendChild(btn);
+                });
+
+                // Load qualities for first episode automatically and set active state
+                if (uniqueEpisodes.length > 0) {
+                    const firstBtn = episodesGrid.firstChild;
+                    if (firstBtn) firstBtn.classList.add('active');
+                    
+                    loadQualitiesList(uniqueEpisodes[0].link, `${simplifiedTitle} - ${uniqueEpisodes[0].epLabel}`);
+                }
+
+            } else {
+                // Movie: Render qualities table directly
+                renderQualitiesTable(data.downloads);
+            }
+
+            resultSection.classList.remove('hidden');
+            resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        } catch (err) {
+            console.error(err);
+            showError(err.message || 'Failed to extract download qualities.');
+        }
+    }
+
+    // Fetch qualities for selected episode
+    async function loadQualitiesList(epUrl, epTitle) {
+        qualitiesList.innerHTML = `<tr><td colspan="4" style="text-align:center;">Fetching links for ${epTitle}...</td></tr>`;
+        summaryTitle.textContent = epTitle;
+        activeMovieTitle = epTitle;
+        downloadNowBtn.disabled = true;
+
+        try {
+            const res = await fetch('/api/movies/info', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url: epUrl })
+            });
+            if (!res.ok) throw new Error();
+            const data = await res.json();
+            
+            renderQualitiesTable(data.downloads);
+        } catch (e) {
+            qualitiesList.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#f43f5e;">Failed to load server qualities for this episode.</td></tr>`;
+        }
+    }
+
+    // Render Qualities Table Rows
+    function renderQualitiesTable(downloads) {
+        qualitiesList.innerHTML = '';
+
+        if (!downloads || downloads.length === 0) {
+            qualitiesList.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#f43f5e;">No direct download links indexed for this item.</td></tr>`;
+            return;
+        }
+
+        downloads.forEach((item, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="text-align: center; vertical-align: middle;">
+                    <input type="radio" name="quality-source" value="${index}" id="source-${index}">
+                </td>
+                <td><strong style="color: #fff;">${item.quality}</strong></td>
+                <td style="color: #eab308; font-weight:600;">${item.size}</td>
+                <td style="font-family: monospace; font-size:0.8rem; color:#9ca3af;">${item.host}</td>
+            `;
+
+            // Bind click to row to auto-select radio
+            tr.addEventListener('click', () => {
+                const radio = tr.querySelector('input[type="radio"]');
+                radio.checked = true;
+                
+                // Style selection
+                document.querySelectorAll('#qualities-list tr').forEach(r => r.classList.remove('selected'));
+                tr.classList.add('selected');
+
+                // Update state
+                selectedDownloadOption = item;
+                summarySize.textContent = item.size;
+                downloadNowBtn.disabled = false;
+            });
+
+            qualitiesList.appendChild(tr);
+        });
+    }
+
+    // Helper: Query iTunes Movie API to fetch English plot, genre, and rating
+    async function queryEnglishMetadata(arabicTitle) {
+        try {
+            // Extract English characters from title
+            const cleanQuery = arabicTitle.replace(/[^\x00-\x7F]+/g, ' ').replace(/\s+/g, ' ').trim();
+            if (!cleanQuery || cleanQuery.length < 3) return;
+
+            const searchUrl = `https://itunes.apple.com/search?media=movie&country=US&term=${encodeURIComponent(cleanQuery)}&limit=1`;
+            const res = await fetch(searchUrl);
+            const data = await res.json();
+            
+            if (data.results && data.results.length > 0) {
+                const track = data.results[0];
+                
+                // Update with English details
+                movieTitle.textContent = track.trackName;
+                movieYear.textContent = new Date(track.releaseDate).getFullYear();
+                movieDirector.textContent = `Directed by ${track.artistName}`;
+                movieGenre.textContent = track.primaryGenreName;
+                
+                if (track.longDescription) {
+                    moviePlot.textContent = track.longDescription;
+                } else if (track.shortDescription) {
+                    moviePlot.textContent = track.shortDescription;
+                }
+                
+                if (track.artworkUrl100) {
+                    const upscaled = track.artworkUrl100.replace('100x100bb', '600x600bb').replace('100x100', '600x600');
+                    moviePoster.src = upscaled;
+                }
+            }
+        } catch (e) {
+            console.warn('Metadata query failed:', e.message);
+        }
+    }
+
+    // Helper: Query TVmaze API to fetch English show summary, rating and genres
+    async function queryTVmazeMetadata(title) {
+        try {
+            // Extract English characters
+            const cleanQuery = title.replace(/[^\x00-\x7F]+/g, ' ').replace(/\s+/g, ' ').trim();
+            if (!cleanQuery || cleanQuery.length < 3) return;
+
+            const searchUrl = `https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(cleanQuery)}`;
+            const res = await fetch(searchUrl);
+            if (!res.ok) return;
+            const data = await res.json();
+            
+            if (data) {
+                if (data.name) {
+                    movieTitle.textContent = data.name;
+                    activeMovieTitle = data.name;
+                    summaryTitle.textContent = data.name;
+                }
+                if (data.summary) {
+                    // Remove HTML tags
+                    moviePlot.textContent = data.summary.replace(/<[^>]*>/g, '').trim();
+                }
+                if (data.rating && data.rating.average) {
+                    movieRating.textContent = `★ ${data.rating.average}`;
+                }
+                if (data.genres && data.genres.length > 0) {
+                    movieGenre.textContent = data.genres.join(', ');
+                }
+                if (data.image && data.image.medium) {
+                    moviePoster.src = data.image.medium;
+                }
+            }
+        } catch (e) {
+            console.warn('TVmaze query failed:', e.message);
+        }
+    }
+
+    // Execute Search Form Submission
+    searchForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const query = searchInput.value.trim();
+        if (query) {
+            triggerSearch(query);
+        }
+    });
+
+    // Download Movie Button Action
+    downloadNowBtn.addEventListener('click', async () => {
+        if (!selectedDownloadOption) return;
+
+        const subtitleLang = subtitlesSelect.value;
+        const videoUrl = selectedDownloadOption.link;
+        const movieTitleText = activeMovieTitle;
+
+        downloadNowBtn.disabled = true;
+        downloadProgress.classList.remove('hidden');
+        downloadProgress.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        updateProgressUI(0, 'Connecting to file hosting servers...');
+
+        // Simulate progress intervals for backend workflow (0% to 90%)
+        let simulatedProgress = 0;
+        const interval = setInterval(() => {
+            if (simulatedProgress < 90) {
+                let step = 1;
+                if (simulatedProgress < 30) step = 4;
+                else if (simulatedProgress < 60) step = 2;
+                
+                simulatedProgress += step;
+                if (simulatedProgress > 90) simulatedProgress = 90;
+
+                let status = 'Downloading movie video stream...';
+                if (simulatedProgress > 45 && subtitleLang !== 'none') {
+                    status = 'Fetching subtitle SRT zip archives...';
+                }
+                if (simulatedProgress > 70) {
+                    status = 'Multiplexing subtitle tracks using FFmpeg...';
+                }
+
+                updateProgressUI(simulatedProgress, status);
+            }
+        }, 1000);
+
+        try {
+            const response = await fetch('/api/movies/download', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    downloadUrl: videoUrl,
+                    subtitleLang: subtitleLang,
+                    title: movieTitleText
+                })
+            });
+
+            clearInterval(interval);
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error || 'Server processing failed.');
+            }
+
+            // Get exact content-length of the returned video stream
+            const contentLength = response.headers.get('content-length');
+            const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+            const reader = response.body.getReader();
+            let loadedBytes = 0;
+            const chunks = [];
+
+            updateProgressUI(90, 'Transferring compiled video track to browser...');
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                chunks.push(value);
+                loadedBytes += value.length;
+
+                if (totalBytes > 0) {
+                    const downloadPercent = Math.round((loadedBytes / totalBytes) * 10);
+                    const totalPercent = 90 + downloadPercent;
+                    const loadedMB = (loadedBytes / (1024 * 1024)).toFixed(1);
+                    const totalMB = (totalBytes / (1024 * 1024)).toFixed(1);
+                    updateProgressUI(totalPercent, `Downloading: ${loadedMB}MB of ${totalMB}MB...`);
+                }
+            }
+
+            updateProgressUI(100, 'Movie download complete!');
+
+            // Save the file
+            const blob = new Blob(chunks, { type: 'video/mp4' });
+            const blobUrl = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            
+            const safeFilename = `${movieTitleText}.mp4`.replace(/[\\/:*?"<>|]/g, '_');
+            
+            a.download = safeFilename;
+            document.body.appendChild(a);
+            a.click();
+            
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobUrl);
+
+            setTimeout(() => {
+                downloadNowBtn.disabled = false;
+                downloadProgress.classList.add('hidden');
+            }, 3000);
+
+        } catch (err) {
+            clearInterval(interval);
+            console.error('Download failed:', err);
+            showError(`Download failed: ${err.message}`);
+        }
+    });
+
+    // Start with quickdiscover grid
+    initQuickTrending();
+});

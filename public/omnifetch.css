@@ -1,0 +1,283 @@
+/* ==========================================
+   OMNIFETCH THEME VARIABLES
+   ========================================== */
+.omnifetch-theme {
+    --color-primary: #6366f1;
+    --color-primary-glow: rgba(99, 102, 241, 0.25);
+    --color-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #f43f5e 100%);
+    --theme-glow-1: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+    --theme-glow-2: radial-gradient(circle, rgba(244, 63, 94, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
+}
+
+.omnifetch-theme .glow-1 {
+    background: var(--theme-glow-1);
+}
+
+.omnifetch-theme .glow-2 {
+    background: var(--theme-glow-2);
+}
+
+.omnifetch-theme .logo svg {
+    stroke: #6366f1;
+    filter: drop-shadow(0px 4px 12px rgba(99, 102, 241, 0.4));
+}
+
+/* ==========================================
+   GATEWAY GRID & CARDS
+   ========================================== */
+.gateway-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1rem;
+    margin-bottom: 2rem;
+}
+
+.gateway-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--color-card-bg);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: 2.5rem 2rem;
+    text-decoration: none;
+    color: var(--color-text);
+    transition: var(--transition-smooth);
+    overflow: hidden;
+    cursor: pointer;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+/* Base glowing effect behind cards */
+.card-glow {
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0;
+    transition: var(--transition-smooth);
+}
+
+.songfetch-card .card-glow {
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, rgba(0, 0, 0, 0) 60%);
+}
+
+.videofetch-card .card-glow {
+    background: radial-gradient(circle, rgba(244, 63, 94, 0.08) 0%, rgba(0, 0, 0, 0) 60%);
+}
+
+/* Card Icons */
+.card-icon-container {
+    position: relative;
+    z-index: 5;
+    width: 76px;
+    height: 76px;
+    border-radius: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1.75rem;
+    transition: var(--transition-smooth);
+}
+
+.songfetch-card .card-icon-container {
+    background: rgba(139, 92, 246, 0.08);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    color: #a855f7;
+    box-shadow: 0 8px 24px rgba(139, 92, 246, 0.1);
+}
+
+.videofetch-card .card-icon-container {
+    background: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.2);
+    color: #f43f5e;
+    box-shadow: 0 8px 24px rgba(244, 63, 94, 0.1);
+}
+
+/* Title & Description */
+.gateway-card h2 {
+    position: relative;
+    z-index: 5;
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.75rem;
+    transition: var(--transition-smooth);
+}
+
+.gateway-card .card-desc {
+    position: relative;
+    z-index: 5;
+    font-family: var(--font-secondary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+    margin-bottom: 1.75rem;
+    flex-grow: 1;
+}
+
+/* Supported platforms badges */
+.gateway-card .supported-platforms {
+    position: relative;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+}
+
+.gateway-card .supported-platforms span {
+    font-family: var(--font-secondary);
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 99px;
+    color: var(--color-text-muted);
+    transition: var(--transition-smooth);
+}
+
+/* Action button inside card */
+.card-action-btn {
+    position: relative;
+    z-index: 5;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.85rem 1.5rem;
+    border-radius: 12px;
+    font-family: var(--font-secondary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    transition: var(--transition-smooth);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.02);
+    color: var(--color-text);
+}
+
+.card-action-btn svg {
+    transition: var(--transition-smooth);
+}
+
+/* ==========================================
+   INTERACTIVE HOVER STATES
+   ========================================== */
+.gateway-card:hover {
+    transform: translateY(-5px);
+    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(20, 22, 37, 0.7);
+}
+
+.gateway-card:hover .card-glow {
+    opacity: 1;
+}
+
+/* SongFetch Hover */
+.songfetch-card:hover {
+    border-color: rgba(139, 92, 246, 0.35);
+    box-shadow: 0 12px 40px rgba(139, 92, 246, 0.12), inset 0 0 16px rgba(139, 92, 246, 0.05);
+}
+
+.songfetch-card:hover h2 {
+    color: #a855f7;
+}
+
+.songfetch-card:hover .card-icon-container {
+    background: rgba(139, 92, 246, 0.15);
+    border-color: rgba(139, 92, 246, 0.4);
+    box-shadow: 0 8px 32px rgba(139, 92, 246, 0.25);
+    color: #c084fc;
+}
+
+.songfetch-card:hover .supported-platforms span {
+    border-color: rgba(139, 92, 246, 0.2);
+    background: rgba(139, 92, 246, 0.05);
+    color: #c084fc;
+}
+
+.songfetch-card:hover .card-action-btn {
+    background: rgba(139, 92, 246, 0.1);
+    border-color: rgba(139, 92, 246, 0.35);
+    color: #c084fc;
+    box-shadow: 0 4px 16px rgba(139, 92, 246, 0.15);
+}
+
+/* VideoFetch Hover */
+.videofetch-card:hover {
+    border-color: rgba(244, 63, 94, 0.35);
+    box-shadow: 0 12px 40px rgba(244, 63, 94, 0.12), inset 0 0 16px rgba(244, 63, 94, 0.05);
+}
+
+.videofetch-card:hover h2 {
+    color: #f43f5e;
+}
+
+.videofetch-card:hover .card-icon-container {
+    background: rgba(244, 63, 94, 0.15);
+    border-color: rgba(244, 63, 94, 0.4);
+    box-shadow: 0 8px 32px rgba(244, 63, 94, 0.25);
+    color: #fb7185;
+}
+
+.videofetch-card:hover .supported-platforms span {
+    border-color: rgba(244, 63, 94, 0.2);
+    background: rgba(244, 63, 94, 0.05);
+    color: #fb7185;
+}
+
+.videofetch-card:hover .card-action-btn {
+    background: rgba(244, 63, 94, 0.1);
+    border-color: rgba(244, 63, 94, 0.35);
+    color: #fb7185;
+    box-shadow: 0 4px 16px rgba(244, 63, 94, 0.15);
+}
+
+.gateway-card:hover .card-action-btn svg {
+    transform: translateX(4px);
+}
+
+/* Active Nav Specifics for Homepage */
+.omnifetch-theme .nav-item.active {
+    background: rgba(99, 102, 241, 0.12);
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    color: #6366f1;
+    box-shadow: 0 4px 15px rgba(99, 102, 241, 0.15);
+}
+
+/* ==========================================
+   RESPONSIVE DESIGN
+   ========================================== */
+@media (max-width: 640px) {
+    .gateway-grid {
+        grid-template-columns: 1fr;
+        gap: 1.25rem;
+    }
+    
+    .gateway-card {
+        padding: 2rem 1.5rem;
+    }
+    
+    .card-icon-container {
+        width: 64px;
+        height: 64px;
+        border-radius: 16px;
+        margin-bottom: 1.25rem;
+    }
+    
+    .card-icon-container svg {
+        width: 32px;
+        height: 32px;
+    }
+    
+    .gateway-card h2 {
+        font-size: 1.5rem;
+    }
+}

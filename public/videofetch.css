@@ -1,0 +1,240 @@
+/* Navigation Tabs (Shared style, fits both SongFetch and VideoFetch since it's imported) */
+.app-nav {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+    margin-bottom: 2.2rem;
+    padding: 4px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.nav-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 1.15rem;
+    border-radius: 12px;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    font-family: var(--font-secondary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: var(--transition-smooth);
+    cursor: pointer;
+}
+
+.nav-item svg {
+    opacity: 0.7;
+    transition: var(--transition-smooth);
+}
+
+.nav-item:hover {
+    color: var(--color-text);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.nav-item:hover svg {
+    opacity: 1;
+}
+
+/* SongFetch active tab theme */
+.nav-item.active {
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.25);
+    color: #a855f7;
+    box-shadow: 0 4px 15px rgba(139, 92, 246, 0.15);
+}
+
+/* VideoFetch active tab theme */
+.videofetch-theme .nav-item.active {
+    background: rgba(244, 63, 94, 0.12);
+    border: 1px solid rgba(244, 63, 94, 0.25);
+    color: #f43f5e;
+    box-shadow: 0 4px 15px rgba(244, 63, 94, 0.15);
+}
+
+/* ==========================================
+   VIDEOFETCH THEME OVERRIDES
+   ========================================== */
+.videofetch-theme {
+    --color-primary: #f43f5e;
+    --color-primary-glow: rgba(244, 63, 94, 0.3);
+    --color-gradient: linear-gradient(135deg, #f43f5e 0%, #fb7185 50%, #fda4af 100%);
+    --theme-glow-1: radial-gradient(circle, rgba(244, 63, 94, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
+    --theme-glow-2: radial-gradient(circle, rgba(251, 113, 133, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
+}
+
+.videofetch-theme .glow-1 {
+    background: var(--theme-glow-1);
+}
+
+.videofetch-theme .glow-2 {
+    background: var(--theme-glow-2);
+}
+
+.videofetch-theme .logo svg {
+    stroke: #f43f5e;
+    filter: drop-shadow(0px 4px 12px rgba(244, 63, 94, 0.4));
+}
+
+.videofetch-theme .search-btn {
+    background: var(--color-gradient);
+    box-shadow: 0 4px 20px rgba(244, 63, 94, 0.25);
+}
+
+.videofetch-theme .search-btn:hover {
+    box-shadow: 0 6px 24px rgba(244, 63, 94, 0.4);
+}
+
+.videofetch-theme .progress-bar-fill {
+    background: var(--color-gradient);
+    box-shadow: 0 0 12px var(--color-primary);
+}
+
+.videofetch-theme .download-btn {
+    background: var(--color-gradient);
+    box-shadow: 0 4px 20px rgba(244, 63, 94, 0.25);
+}
+
+.videofetch-theme .download-btn:hover {
+    box-shadow: 0 6px 24px rgba(244, 63, 94, 0.4);
+}
+
+/* ==========================================
+   VIDEO CARD SPECIFICS
+   ========================================== */
+.video-card {
+    display: flex;
+    gap: 1.5rem;
+}
+
+.video-thumbnail-container {
+    flex-shrink: 0;
+    width: 220px;
+    aspect-ratio: 16/9;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.video-thumbnail-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.video-duration-badge {
+    position: absolute;
+    bottom: 12px;
+    right: 12px;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #fff;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: var(--font-secondary);
+    letter-spacing: 0.05em;
+    z-index: 5;
+}
+
+.platform-info-text svg {
+    color: var(--color-primary);
+}
+
+/* Quality dropdown styles */
+.quality-selector-container {
+    margin-top: 1.25rem;
+    margin-bottom: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.selector-label {
+    font-family: var(--font-secondary);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.select-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.select-wrapper select {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    padding: 0.8rem 1.2rem;
+    padding-right: 3rem;
+    font-family: var(--font-primary);
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    transition: var(--transition-smooth);
+}
+
+.select-wrapper select option {
+    background-color: #07080d;
+    color: #f3f4f6;
+}
+
+.select-wrapper select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    background: rgba(255, 255, 255, 0.07);
+    box-shadow: 0 0 0 3px rgba(244, 63, 94, 0.15);
+}
+
+.select-arrow {
+    position: absolute;
+    right: 1.2rem;
+    top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    color: var(--color-text-muted);
+    transition: var(--transition-smooth);
+}
+
+.select-wrapper select:focus + .select-arrow {
+    color: var(--color-primary);
+    transform: translateY(-50%) rotate(180deg);
+}
+
+/* Responsive adjustments */
+@media (max-width: 640px) {
+    .video-card {
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    
+    .video-thumbnail-container {
+        width: 100%;
+        max-width: 320px;
+    }
+    
+    .quality-selector-container {
+        align-items: center;
+    }
+    
+    .select-wrapper {
+        max-width: 320px;
+    }
+}
