@@ -177,14 +177,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper: Build display title with season for TV series items
     function buildDisplayTitle(item) {
+        if (!item || !item.title) return 'Unknown Title';
+        // Grouped season cards already have clean Arabic titles — return as-is
+        if (item.seasonNumber) {
+            const raw = item.title.replace(/مسلسل\s*/g, '').trim();
+            return raw;
+        }
         let title = cleanTitle(item.title);
         if (classifyItemType(item) === 'series') {
-            const season = extractSeason(item.title, item.link);
+            const season = extractSeason(item.title, item.link || item.id || '');
             if (season) {
                 title += ` S${season}`;
             }
         }
-        return title;
+        return title || item.title;
     }
 
     // Initialize Quick Discover Grid
@@ -219,13 +225,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper: Classify result items as movie or series
     function classifyItemType(item) {
-        const title = item.title.toLowerCase();
-        const url = item.link.toLowerCase();
-        
+        const title = (item.title || '').toLowerCase();
+        const url = (item.link || item.id || '').toLowerCase();
+        // If backend already flagged as series (grouped season card)
+        if (item.isSeries) return 'series';
         if (url.includes('/movie/') || title.includes('فيلم')) {
             return 'movie';
         }
-        if (url.includes('/series/') || url.includes('/episode/') || title.includes('مسلسل') || title.includes('حلقة') || title.includes('موسم')) {
+        if (url.includes('/series/') || url.includes('/episode/') || url.includes('watch.php') || title.includes('مسلسل') || title.includes('حلقة') || title.includes('موسم')) {
             return 'series';
         }
         return 'movie'; // fallback
@@ -313,9 +320,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 id: r.id,
                 title: r.title,
                 img: r.poster,
-                link: r.id,
+                link: r.id || '',
                 source: r.sourceName || r.source,
-                isArabic: true
+                isArabic: true,
+                isSeries: r.isSeries || false,
+                seasonNumber: r.seasonNumber || null,
+                // Pass grouped season episodes so detail view can show them directly
+                groupedEpisodes: r.episodes || null
             })) : [];
 
             // If Arabic results exist, show ONLY Arabic site results (TopCinema, WeCima, ArabSeed, etc.)!
@@ -464,23 +475,37 @@ document.addEventListener('DOMContentLoaded', () => {
                 await queryEnglishMetadata(item.title);
             }
 
-            if (data.type === 'series') {
-                // Populate TV series selector grid (Netflix style circular/pill buttons)
+            if (data.type === 'series' || (item.groupedEpisodes && item.groupedEpisodes.length > 0)) {
+                // Populate TV series selector grid
                 tvSelectorContainer.classList.remove('hidden');
                 episodesGrid.innerHTML = '';
 
+                // Support TWO episode formats:
+                // 1. Grouped season cards: [{id, title, source}]  (from arabicMediaResolver groupSeriesResults)
+                // 2. Standard resolved episodes: [{text, link}]   (from resolvePageDetails)
+                let rawEpisodes = [];
+                if (item.groupedEpisodes && item.groupedEpisodes.length > 0) {
+                    // Grouped format — convert to standard {text, link}
+                    rawEpisodes = item.groupedEpisodes.map((ep, idx) => ({
+                        text: ep.title || `الحلقة ${idx + 1}`,
+                        link: ep.id || ep.url || item.link || ''
+                    }));
+                } else if (data.episodes && data.episodes.length > 0) {
+                    rawEpisodes = data.episodes;
+                }
+
                 // Parse episode numbers and sort numerically
-                const parsedEpisodes = data.episodes.map((ep, idx) => {
-                    const epMatch = ep.text.match(/(?:حلقة|الحلقة|Episode)\s*(\d+)/i);
+                const parsedEpisodes = rawEpisodes.map((ep, idx) => {
+                    const epText = ep.text || '';
+                    const epMatch = epText.match(/(?:حلقة|الحلقة|Episode)\s*(\d+)/i);
                     const epNum = epMatch ? parseInt(epMatch[1]) : (idx + 1);
-                    let epLabel = epMatch ? `Ep. ${epNum}` : ep.text.replace(/[\u0600-\u06FF]/g, '').replace(/\s+/g, ' ').trim() || `Ep. ${idx + 1}`;
+                    let epLabel = epMatch ? `Ep. ${epNum}` : (epText.replace(/[\u0600-\u06FF]/g, '').trim() || `Ep. ${idx + 1}`);
                     return { ...ep, epNum, epLabel };
                 });
 
-                // Sort by episode number ascending
                 parsedEpisodes.sort((a, b) => a.epNum - b.epNum);
 
-                // Deduplicate by episode number (keep first occurrence)
+                // Deduplicate by episode number
                 const seen = new Set();
                 const uniqueEpisodes = parsedEpisodes.filter(ep => {
                     if (seen.has(ep.epNum)) return false;
@@ -493,12 +518,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     btn.type = 'button';
                     btn.className = 'episode-btn';
                     btn.textContent = ep.epLabel;
-                    btn.title = ep.text;
+                    btn.title = ep.text || ep.epLabel;
 
                     btn.addEventListener('click', () => {
                         document.querySelectorAll('.episode-btn').forEach(b => b.classList.remove('active'));
                         btn.classList.add('active');
-                        
                         const fullTitle = `${simplifiedTitle} - ${ep.epLabel}`;
                         loadQualitiesList(ep.link, fullTitle);
                     });
@@ -506,11 +530,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     episodesGrid.appendChild(btn);
                 });
 
-                // Load qualities for first episode automatically and set active state
                 if (uniqueEpisodes.length > 0) {
                     const firstBtn = episodesGrid.firstChild;
                     if (firstBtn) firstBtn.classList.add('active');
-                    
                     loadQualitiesList(uniqueEpisodes[0].link, `${simplifiedTitle} - ${uniqueEpisodes[0].epLabel}`);
                 }
 
