@@ -6,7 +6,7 @@ const SITE_CONFIGS = {
   topcinema: {
     name: 'TopCinema',
     baseUrl: 'https://topcinemaa.cam',
-    searchPath: '/search?s='
+    searchPath: '/?s='
   },
   wecima: {
     name: 'WeCima / MyCima',
@@ -16,7 +16,7 @@ const SITE_CONFIGS = {
   arabseed: {
     name: 'ArabSeed',
     baseUrl: 'https://arabseeds.show',
-    searchPath: '/find?find='
+    searchPath: '/?s='
   },
   movizland: {
     name: 'Movizland',
@@ -78,24 +78,34 @@ function extractPoster($, el) {
 // Scraper: TopCinema (topcinemaa.cam)
 // ----------------------------------------------------
 async function searchTopCinema(query) {
-  const url = `${SITE_CONFIGS.topcinema.baseUrl}/search?s=${encodeURIComponent(query)}`;
+  const url = `${SITE_CONFIGS.topcinema.baseUrl}/?s=${encodeURIComponent(query)}`;
   const html = await fetchHtml(url);
   if (!html) return [];
   
   const $ = cheerio.load(html);
   const results = [];
   
-  $('.Grid--TopCinemaPosts .GridItem, .movie-item, .BlockItem').each((_, el) => {
+  $('.BlockItem, .movie-item, .entry-box, article, .SmallBlockItem, .MovieBlock').each((_, el) => {
     const linkEl = $(el).find('a').first();
-    const titleEl = $(el).find('.title, .entry-title, h3, h2').first();
+    const titleEl = $(el).find('.Title, .title, .entry-title, h3, h2, h4').first();
     
     const href = linkEl.attr('href');
-    const title = titleEl.text().trim() || linkEl.attr('title') || '';
+    let title = titleEl.text().trim() || linkEl.text().trim() || linkEl.attr('title') || '';
+    
+    // Fallback title from decoded URL slug if empty
+    if (!title && href) {
+      try {
+        const slug = decodeURIComponent(href.split('/').filter(Boolean).pop() || '');
+        title = slug.replace(/-/g, ' ');
+      } catch (e) {}
+    }
+
     const poster = extractPoster($, el);
     
-    if (href && title) {
+    if (href && title && (href.includes('topcinema') || href.startsWith('/'))) {
+      const fullUrl = href.startsWith('http') ? href : `${SITE_CONFIGS.topcinema.baseUrl}${href}`;
       results.push({
-        id: href,
+        id: fullUrl,
         title,
         poster,
         source: 'topcinema',
@@ -146,24 +156,33 @@ async function searchWeCima(query) {
 // Scraper: ArabSeed (arabseeds.show)
 // ----------------------------------------------------
 async function searchArabSeed(query) {
-  const url = `${SITE_CONFIGS.arabseed.baseUrl}/find?find=${encodeURIComponent(query)}`;
+  const url = `${SITE_CONFIGS.arabseed.baseUrl}/?s=${encodeURIComponent(query)}`;
   const html = await fetchHtml(url);
   if (!html) return [];
   
   const $ = cheerio.load(html);
   const results = [];
   
-  $('.MovieBlock, .BlockItem, .MovieBox').each((_, el) => {
+  $('.MovieBlock, .BlockItem, .MovieBox, .entry-box, article').each((_, el) => {
     const linkEl = $(el).find('a').first();
-    const titleEl = $(el).find('.Title, h4, h3').first();
+    const titleEl = $(el).find('.Title, .title, h4, h3, h2').first();
     
     const href = linkEl.attr('href');
-    const title = titleEl.text().trim() || linkEl.attr('title') || '';
+    let title = titleEl.text().trim() || linkEl.text().trim() || linkEl.attr('title') || '';
+    
+    if (!title && href) {
+      try {
+        const slug = decodeURIComponent(href.split('/').filter(Boolean).pop() || '');
+        title = slug.replace(/-/g, ' ');
+      } catch (e) {}
+    }
+
     const poster = extractPoster($, el);
     
     if (href && title) {
+      const fullUrl = href.startsWith('http') ? href : `${SITE_CONFIGS.arabseed.baseUrl}${href}`;
       results.push({
-        id: href,
+        id: fullUrl,
         title,
         poster,
         source: 'arabseed',
