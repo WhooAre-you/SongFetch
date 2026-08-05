@@ -715,25 +715,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.URL.revokeObjectURL(blobUrl);
                 updateProgressUI(100, 'Direct file download complete! Saved to your Downloads folder.');
             } else {
-                // Fallback: Direct attachment download without target _blank
-                const saveLink = document.createElement('a');
-                saveLink.href = videoUrl;
-                saveLink.download = safeFilename;
-                document.body.appendChild(saveLink);
-                saveLink.click();
-                saveLink.remove();
-                updateProgressUI(100, 'Direct file download initiated in browser!');
+                const errData = await response.json().catch(() => ({}));
+                const errMsg = errData.error || 'تنبيه: سيرفر التنزيل هذا غير متاح حالياً. يرجى اختيار سيرفر آخر مثل (VidTube أو UpDown أو Mdiaload) من الجدول أعلاه.';
+                showError(errMsg);
+                updateProgressUI(0, errMsg);
             }
         } catch (err) {
             console.error(err);
-            // Fallback: Direct attachment download without target _blank
-            const saveLink = document.createElement('a');
-            saveLink.href = videoUrl;
-            saveLink.download = safeFilename;
-            document.body.appendChild(saveLink);
-            saveLink.click();
-            saveLink.remove();
-            updateProgressUI(100, 'Direct file download initiated!');
+            const errMsg = err.message || 'تنبيه: تعذر التنزيل من هذا السيرفر. اختر سيرفر آخر من الجدول أعلاه.';
+            showError(errMsg);
+            updateProgressUI(0, errMsg);
         } finally {
             downloadNowBtn.disabled = false;
         }

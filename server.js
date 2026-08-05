@@ -1084,22 +1084,37 @@ app.post('/api/movies/info', async (req, res) => {
   }
 });
 
-// Route: MovieFetch download (proxying stream without subtitle multiplexing)
+// Route: MovieFetch download (proxying stream with validation against corrupt/dead links)
 app.post('/api/movies/download', async (req, res) => {
   const { downloadUrl, title } = req.body;
   if (!downloadUrl) {
     return res.status(400).json({ error: 'Download URL is required' });
   }
 
-  console.log(`Download request received for: "${title}"`);
+  console.log(`Download request received for: "${title}" => ${downloadUrl}`);
   
   try {
     let actualVideoUrl = downloadUrl;
     try {
       const parsed = JSON.parse(downloadUrl);
       if (parsed.videoUrl) actualVideoUrl = parsed.videoUrl;
-    } catch (e) {
-      // fallback
+    } catch (e) {}
+
+    // First validate the URL to ensure it's not a dead hoster page (HTML 404/copyright error)
+    const checkRes = await fetch(actualVideoUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    const contentType = checkRes.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      const text = await checkRes.text();
+      if (text.includes('copyright') || text.includes('removed') || text.includes('Notice !') || text.includes('404 Not Found') || text.length < 5000) {
+        return res.status(400).json({
+          error: 'هذا السيرفر (BowFile) ملفه محذوف بسبب الحقوق أو غير متوفر حالياً. يرجى اختيار سيرفر آخر مثل (VidTube أو UpDown أو Mdiaload) من الجدول أعلاه.'
+        });
+      }
     }
 
     const safeFilename = `${title}.mp4`.replace(/[\\/:*?"<>|]/g, '_');
@@ -1111,9 +1126,7 @@ app.post('/api/movies/download', async (req, res) => {
       method: 'GET',
       responseType: 'stream',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Origin': 'https://videodownloader.site',
-        'Referer': 'https://videodownloader.site/'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
       }
     });
 
@@ -1121,7 +1134,7 @@ app.post('/api/movies/download', async (req, res) => {
   } catch (err) {
     console.error('Movie download proxy failed:', err.message);
     if (!res.headersSent) {
-      res.status(500).json({ error: err.message || 'An error occurred during movie download.' });
+      res.status(500).json({ error: 'تعذر الاتصال بسيرفر التحميل هذا. يرجى تجربة سيرفر آخر من الجدول أعلاه.' });
     }
   }
 });
