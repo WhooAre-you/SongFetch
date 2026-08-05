@@ -393,7 +393,7 @@ function isRelevantTitle(title, query) {
   if (t.includes(q)) return true;
 
   const alias = TITLE_ALIASES[q];
-  if (alias && alias !== query.toLowerCase()) && t.includes(alias)) return true;
+  if (alias && alias !== query.toLowerCase() && t.includes(alias)) return true;
 
   const words = q.split(/\s+/).filter(w => w.length > 2);
   if (words.length === 0) return true;
