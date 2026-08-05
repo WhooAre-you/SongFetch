@@ -60,9 +60,14 @@ const BROWSER_HEADERS = {
   'Upgrade-Insecure-Requests': '1'
 };
 
-// Helper: Make HTTP request with mirror failovers & SSL agent
+// Helper: Make HTTP request with mirror failovers, proxy bypass & SSL agent
 async function fetchHtml(url, mirrors = []) {
-  const urlsToTry = [url, ...mirrors.map(m => url.replace(/^https?:\/\/[^\/]+/, m))];
+  const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+  const urlsToTry = [
+    url,
+    ...mirrors.map(m => url.replace(/^https?:\/\/[^\/]+/, m)),
+    proxyUrl
+  ];
   
   for (const targetUrl of urlsToTry) {
     try {
@@ -72,7 +77,7 @@ async function fetchHtml(url, mirrors = []) {
         timeout: 8000,
         maxRedirects: 5
       });
-      if (response.data && (typeof response.data === 'string')) {
+      if (response.data && (typeof response.data === 'string') && response.data.length > 300) {
         return response.data;
       }
     } catch (error) {
@@ -84,7 +89,7 @@ async function fetchHtml(url, mirrors = []) {
         });
         if (fetchRes.ok) {
           const htmlText = await fetchRes.text();
-          if (htmlText) return htmlText;
+          if (htmlText && htmlText.length > 300) return htmlText;
         }
       } catch (fetchErr) {
         console.error(`[ArabicResolver] Native fetch mirror failed (${targetUrl}):`, fetchErr.message);
