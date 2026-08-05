@@ -290,27 +290,44 @@ document.addEventListener('DOMContentLoaded', () => {
         progressStatus.textContent = status;
     }
 
-    // Search Trigger (queries search API with WeFeed CDN index)
+    // Search Trigger (queries both standard index and Arabic sites: TopCinema, WeCima, ArabSeed, Movizland, QFilm, Prestige)
     async function triggerSearch(query) {
         resetUI();
         loaderText.textContent = `Searching cinema archives for "${query}"...`;
         loader.classList.remove('hidden');
 
         try {
-            const res = await fetch(`/api/movies/search?q=${encodeURIComponent(query)}`);
-            if (!res.ok) throw new Error('Search request failed.');
-            const data = await res.json();
+            const [stdRes, arabicRes] = await Promise.allSettled([
+                fetch(`/api/movies/search?q=${encodeURIComponent(query)}`).then(r => r.ok ? r.json() : { results: [] }),
+                fetch('/api/arabic/search', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query })
+                }).then(r => r.ok ? r.json() : { results: [] })
+            ]);
 
             loader.classList.add('hidden');
 
-            if (!data.results || data.results.length === 0) {
+            const stdResults = (stdRes.status === 'fulfilled' && stdRes.value.results) ? stdRes.value.results : [];
+            const arabicResults = (arabicRes.status === 'fulfilled' && arabicRes.value.results) ? arabicRes.value.results.map(r => ({
+                id: r.id,
+                title: r.title,
+                img: r.poster,
+                link: r.id,
+                source: r.sourceName || r.source,
+                isArabic: true
+            })) : [];
+
+            const combinedResults = [...arabicResults, ...stdResults];
+
+            if (combinedResults.length === 0) {
                 showError(`No movie or series found matching "${query}". Try another title.`);
                 return;
             }
 
             // Save results and trigger render
-            sectionTitle.textContent = `Search Results for "${query}"`;
-            currentSearchResults = data.results;
+            sectionTitle.textContent = `Search Results for "${query}" (${combinedResults.length} found)`;
+            currentSearchResults = combinedResults;
             renderSearchResults();
 
         } catch (err) {
@@ -369,18 +386,28 @@ document.addEventListener('DOMContentLoaded', () => {
     async function loadWatchDetails(item) {
         resetUI();
         const sourceName = item.source || 'WeFeed';
-        loaderText.textContent = `Resolving ${sourceName} CDN mirrors for "${item.title}"...`;
+        loaderText.textContent = `Resolving ${sourceName} mirrors for "${item.title}"...`;
         loader.classList.remove('hidden');
 
         try {
-            const res = await fetch('/api/movies/info', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: item.link })
-            });
-
-            if (!res.ok) throw new Error(`Failed to parse details page from ${sourceName}.`);
-            const data = await res.json();
+            let data;
+            if (item.isArabic) {
+                const res = await fetch('/api/arabic/resolve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: item.link, title: item.title, source: item.source })
+                });
+                if (!res.ok) throw new Error(`Failed to resolve item details from ${sourceName}.`);
+                data = await res.json();
+            } else {
+                const res = await fetch('/api/movies/info', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: item.link })
+                });
+                if (!res.ok) throw new Error(`Failed to parse details page from ${sourceName}.`);
+                data = await res.json();
+            }
             
             loader.classList.add('hidden');
             let simplifiedTitle = buildDisplayTitle(item);

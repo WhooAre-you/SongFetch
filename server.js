@@ -9,6 +9,7 @@ const nodeID3 = require('node-id3');
 const ffmpegPath = require('ffmpeg-static');
 const AdmZip = require('adm-zip');
 const { resolveYouTubePlaylist, resolveSoundCloudPlaylist } = require('./playlistResolvers');
+const arabicResolver = require('./arabicMediaResolver');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1122,6 +1123,53 @@ app.post('/api/movies/download', async (req, res) => {
     if (!res.headersSent) {
       res.status(500).json({ error: err.message || 'An error occurred during movie download.' });
     }
+  }
+});
+
+// ====================================================
+// Arabic Media Routes (TopCinema, WeCima, ArabSeed, Movizland, QFilm, Prestige)
+// ====================================================
+
+// Unified Search across TopCinema, WeCima, ArabSeed, Movizland, QFilm, Prestige
+app.post('/api/arabic/search', async (req, res) => {
+  const { query } = req.body;
+  if (!query || !query.trim()) {
+    return res.status(400).json({ error: 'Search query is required' });
+  }
+
+  try {
+    const results = await arabicResolver.searchAllSites(query.trim());
+    return res.json({ results });
+  } catch (err) {
+    console.error('Arabic sites search error:', err.message);
+    return res.status(500).json({ error: 'Failed to search Arabic media sites' });
+  }
+});
+
+// Resolve page details & fallback episodes
+app.post('/api/arabic/resolve', async (req, res) => {
+  const { url, title, source } = req.body;
+  if (!url) {
+    return res.status(400).json({ error: 'Target URL is required' });
+  }
+
+  try {
+    const details = await arabicResolver.resolvePageDetails(url);
+    
+    // If it's a series, run the multi-source fallback episode merger
+    if (details.type === 'series' && details.episodes.length > 0) {
+      const mergedEpisodes = await arabicResolver.fetchAndMergeCompleteSeries(
+        title || 'Series',
+        details.episodes,
+        source || 'Primary Source'
+      );
+      return res.json({ type: 'series', episodes: mergedEpisodes, downloads: details.downloads });
+    }
+
+    return res.json(details);
+  } catch (err) {
+    console.error('Arabic page resolution error:', err.message);
+    return res.status(500).json({ error: 'Failed to resolve item details' });
   }
 });
 
