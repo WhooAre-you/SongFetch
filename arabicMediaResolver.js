@@ -76,12 +76,10 @@ const TITLE_ALIASES = {
   'titanic': 'تيتانيك'
 };
 
-// Known Navigation links to IGNORE when parsing download hosters
 const EXCLUDED_PATHS = [
   '/full-packs', '/category/', '/recent', '/netflix', '/top-rating', '/movies', '/series', '/dmca', '/contact', '/privacy'
 ];
 
-// Universal Fast HTTP Fetcher with Concurrent Failover Proxies & Strict Timeout
 async function fetchHtml(url, mirrors = []) {
   const proxy1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
   const proxy2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
@@ -95,7 +93,7 @@ async function fetchHtml(url, mirrors = []) {
 
   const fetchWithTimeout = async (targetUrl) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 2200);
+    const timer = setTimeout(() => controller.abort(), 2500);
     try {
       const res = await fetch(targetUrl, {
         headers: BROWSER_HEADERS,
@@ -120,6 +118,42 @@ async function fetchHtml(url, mirrors = []) {
   } catch (e) {}
 
   return null;
+}
+
+// Resolve direct video file stream URL from hoster link (e.g. VidTube, UpDown, etc.)
+async function resolveDirectHosterMediaUrl(url) {
+  try {
+    if (!url || typeof url !== 'string') return url;
+    if (url.includes('.mp4') || url.includes('.mkv') || url.includes('cdn-video.xyz')) {
+      return url;
+    }
+
+    const html = await fetchHtml(url);
+    if (!html) return url;
+
+    // Check for VidTube download sublink (/d/xxx_x)
+    const subMatch = html.match(/href="([^"]+_[xX])"/i);
+    let targetHtml = html;
+    if (subMatch) {
+      const subUrl = subMatch[1].startsWith('http') ? subMatch[1] : `${new URL(url).origin}${subMatch[1]}`;
+      const subHtml = await fetchHtml(subUrl);
+      if (subHtml) targetHtml = subHtml;
+    }
+
+    // Extract direct .mp4 / video CDN link
+    const mp4Match = targetHtml.match(/(https?:\/\/[^"'\s\><]+\.mp4[^"'\s\><]*)/i) ||
+                     targetHtml.match(/(https?:\/\/[^"'\s\><]*cdn[^"'\s\><]*\.mp4[^"'\s\><]*)/i) ||
+                     targetHtml.match(/<source [^>]*src="([^"]+)"/i) ||
+                     targetHtml.match(/<video [^>]*src="([^"]+)"/i);
+
+    if (mp4Match) {
+      console.log(`[ArabicResolver] Extracted direct MP4 stream: ${mp4Match[1]}`);
+      return mp4Match[1];
+    }
+  } catch (e) {
+    console.error('[ArabicResolver] resolveDirectHosterMediaUrl error:', e.message);
+  }
+  return url;
 }
 
 // TopCinema Scraper
@@ -359,14 +393,14 @@ function isRelevantTitle(title, query) {
   if (t.includes(q)) return true;
 
   const alias = TITLE_ALIASES[q];
-  if (alias && t.includes(alias)) return true;
+  if (alias && alias !== query.toLowerCase()) && t.includes(alias)) return true;
 
   const words = q.split(/\s+/).filter(w => w.length > 2);
   if (words.length === 0) return true;
   return words.some(w => t.includes(w));
 }
 
-// Search ALL 6 Sites Concurrently (DO NOT BREAK EARLY!)
+// Search ALL 6 Sites Concurrently
 async function searchAllSites(query) {
   console.log(`[ArabicResolver] Searching all sites: "${query}"`);
 
@@ -401,7 +435,7 @@ async function searchAllSites(query) {
   });
 }
 
-// Deep Page Details Resolver: Automatically Fetches Main Page + /download/ + /watch/ Subpages
+// Deep Page Details Resolver
 async function resolvePageDetails(url) {
   try {
     const cleanUrl = url.replace(/\/$/, '');
@@ -441,7 +475,6 @@ async function resolvePageDetails(url) {
       const isExcluded = EXCLUDED_PATHS.some(p => href.includes(p));
       if (isExcluded) continue;
 
-      // Extract real direct file hosters (vidtube, updown, bowfile, mdiaload, 1fichier, 1cloudfile, mega, mediafire, uptobox, etc.)
       if (
         href.startsWith('http') &&
         (
@@ -470,7 +503,6 @@ async function resolvePageDetails(url) {
       }
     }
 
-    // Extract Iframe watch players
     const iframes = [...combinedHtml.matchAll(/<iframe [^>]*src="([^"]+)"/gi)];
     for (let i = 0; i < iframes.length; i++) {
       const src = iframes[i][1];
@@ -481,7 +513,6 @@ async function resolvePageDetails(url) {
       }
     }
 
-    // If no direct hoster link matched, extract any external download/watch link on page
     if (downloads.length === 0) {
       for (const m of linkMatches) {
         const href = m[1];
@@ -499,7 +530,6 @@ async function resolvePageDetails(url) {
       }
     }
 
-    // Fallback if still empty
     if (downloads.length === 0) {
       downloads.push({
         quality: '1080p Direct Mirror Link',
@@ -587,6 +617,7 @@ async function fetchAndMergeCompleteSeries(title, primaryEpisodes = [], primaryS
 module.exports = {
   searchAllSites,
   resolvePageDetails,
+  resolveDirectHosterMediaUrl,
   fetchAndMergeCompleteSeries,
   SITE_CONFIGS
 };

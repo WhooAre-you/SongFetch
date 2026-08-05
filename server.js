@@ -1100,6 +1100,10 @@ app.post('/api/movies/download', async (req, res) => {
       if (parsed.videoUrl) actualVideoUrl = parsed.videoUrl;
     } catch (e) {}
 
+    // Automatically resolve direct video stream URL from hosters (like VidTube, UpDown, etc.)
+    actualVideoUrl = await arabicResolver.resolveDirectHosterMediaUrl(actualVideoUrl);
+    console.log(`[Server] Resolved direct media stream URL: ${actualVideoUrl}`);
+
     // First validate the URL to ensure it's not a dead hoster page (HTML 404/copyright error)
     const checkRes = await fetch(actualVideoUrl, {
       headers: {
@@ -1110,7 +1114,7 @@ app.post('/api/movies/download', async (req, res) => {
     const contentType = checkRes.headers.get('content-type') || '';
     if (contentType.includes('text/html')) {
       const text = await checkRes.text();
-      if (text.includes('copyright') || text.includes('removed') || text.includes('Notice !') || text.includes('404 Not Found') || text.length < 5000) {
+      if (text.includes('copyright') || text.includes('removed') || text.includes('Notice !') || text.includes('404 Not Found')) {
         return res.status(400).json({
           error: 'هذا السيرفر (BowFile) ملفه محذوف بسبب الحقوق أو غير متوفر حالياً. يرجى اختيار سيرفر آخر مثل (VidTube أو UpDown أو Mdiaload) من الجدول أعلاه.'
         });
