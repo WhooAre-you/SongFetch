@@ -671,128 +671,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Download Movie Button Action
+    // Download Movie Button Action - Automatic Direct File Download to Device
     downloadNowBtn.addEventListener('click', async () => {
         if (!selectedDownloadOption) return;
 
         const subtitleLang = subtitlesSelect.value;
         const videoUrl = selectedDownloadOption.url || selectedDownloadOption.link || selectedDownloadOption.id;
-        const movieTitleText = activeMovieTitle;
+        const movieTitleText = activeMovieTitle || 'movie';
 
         if (!videoUrl) {
             showError('No valid download URL found for this option.');
             return;
         }
 
-        // If it's a direct web page or mirror URL from Arabic site, open directly or start download
-        if (videoUrl.includes('topcinema') || videoUrl.includes('wecima') || videoUrl.includes('arabseed') || videoUrl.includes('movizland') || videoUrl.includes('qfilm') || videoUrl.includes('brstej')) {
-            window.open(videoUrl, '_blank');
-            showError(`Opening direct watch/download page on ${selectedDownloadOption.host || 'source'}...`);
-            return;
-        }
-
         downloadNowBtn.disabled = true;
         downloadProgress.classList.remove('hidden');
         downloadProgress.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        updateProgressUI(0, 'Connecting to file hosting servers...');
+        updateProgressUI(10, 'Preparing direct file download to your device...');
 
-        // Simulate progress intervals for backend workflow (0% to 90%)
-        let simulatedProgress = 0;
-        const interval = setInterval(() => {
-            if (simulatedProgress < 90) {
-                let step = 1;
-                if (simulatedProgress < 30) step = 4;
-                else if (simulatedProgress < 60) step = 2;
-                
-                simulatedProgress += step;
-                if (simulatedProgress > 90) simulatedProgress = 90;
+        const safeFilename = `${movieTitleText.replace(/[\\/:*?"<>|]/g, '_')}.mp4`;
 
-                let status = 'Downloading movie video stream...';
-                if (simulatedProgress > 45 && subtitleLang !== 'none') {
-                    status = 'Fetching subtitle SRT zip archives...';
-                }
-                if (simulatedProgress > 70) {
-                    status = 'Multiplexing subtitle tracks using FFmpeg...';
-                }
+        // Direct File Download Trigger
+        const saveLink = document.createElement('a');
+        saveLink.href = videoUrl;
+        saveLink.download = safeFilename;
+        saveLink.target = '_blank';
+        saveLink.rel = 'noopener';
+        document.body.appendChild(saveLink);
 
-                updateProgressUI(simulatedProgress, status);
-            }
-        }, 1000);
-
-        try {
-            const response = await fetch('/api/movies/download', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    downloadUrl: videoUrl,
-                    subtitleLang: subtitleLang,
-                    title: movieTitleText
-                })
-            });
-
-            clearInterval(interval);
-
-            if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                // Fallback to opening direct link
-                window.open(videoUrl, '_blank');
-                throw new Error(errData.error || 'Server proxying failed. Opening direct stream link in new tab...');
-            }
-
-            // Get exact content-length of the returned video stream
-            const contentLength = response.headers.get('content-length');
-            const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-
-            const reader = response.body.getReader();
-            let loadedBytes = 0;
-            const chunks = [];
-
-            updateProgressUI(90, 'Transferring compiled video track to browser...');
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-
-                chunks.push(value);
-                loadedBytes += value.length;
-
-                if (totalBytes > 0) {
-                    const downloadPercent = Math.round((loadedBytes / totalBytes) * 10);
-                    const totalPercent = 90 + downloadPercent;
-                    const loadedMB = (loadedBytes / (1024 * 1024)).toFixed(1);
-                    const totalMB = (totalBytes / (1024 * 1024)).toFixed(1);
-                    updateProgressUI(totalPercent, `Downloading: ${loadedMB}MB of ${totalMB}MB...`);
-                }
-            }
-
-            updateProgressUI(100, 'Movie download complete!');
-
-            // Save the file
-            const blob = new Blob(chunks, { type: 'video/mp4' });
-            const blobUrl = URL.createObjectURL(blob);
-
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            
-            const safeFilename = `${movieTitleText}.mp4`.replace(/[\\/:*?"<>|]/g, '_');
-            
-            a.download = safeFilename;
-            document.body.appendChild(a);
-            a.click();
-            
-            document.body.removeChild(a);
-            URL.revokeObjectURL(blobUrl);
-
-            setTimeout(() => {
-                downloadNowBtn.disabled = false;
-                downloadProgress.classList.add('hidden');
-            }, 3000);
-
-        } catch (err) {
-            clearInterval(interval);
-            console.error('Download failed:', err);
-            showError(`Download failed: ${err.message}`);
-        }
+        setTimeout(() => {
+            saveLink.click();
+            saveLink.remove();
+            updateProgressUI(100, 'Direct file download started! File is saving to your Downloads folder.');
+            downloadNowBtn.disabled = false;
+        }, 500);
     });
 
     // Start with quickdiscover grid
