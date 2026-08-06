@@ -312,14 +312,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 groupedEpisodes: r.episodes || null
             })) : [];
 
-            // If Arabic results exist, show ONLY Arabic site results (TopCinema, WeCima, ArabSeed, etc.)!
-            // WeFeed fallback is only used if 0 Arabic results are found.
-            let combinedResults = [];
-            if (arabicResults.length > 0) {
-                combinedResults = arabicResults;
-            } else {
-                combinedResults = stdResults;
-            }
+            // Combine both Arabic site results and WeFeed standard results so search covers ALL sites!
+            const seenIds = new Set();
+            const combinedResults = [];
+
+            [...arabicResults, ...stdResults].forEach(item => {
+                const key = item.id || item.link || item.title;
+                if (key && !seenIds.has(key)) {
+                    seenIds.add(key);
+                    combinedResults.push(item);
+                }
+            });
 
             if (combinedResults.length === 0) {
                 showError(`No movie or series found matching "${query}". Try another title.`);
@@ -750,37 +753,11 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // If the URL is a stream/embed player page (not a direct video file),
-        // open it in a new tab so the user can watch it directly in the browser.
-        const isStreamPage = 
-            videoUrl.includes('embed.php') ||
-            videoUrl.includes('embed.') ||
-            videoUrl.includes('player.') ||
-            videoUrl.includes('/watch') ||
-            (selectedDownloadOption.size === 'Stream');
-
-        if (isStreamPage) {
-            // Show inline embedded player instead of opening a new tab
-            const modal = document.getElementById('stream-modal');
-            const iframe = document.getElementById('stream-iframe');
-            const modalTitle = document.getElementById('stream-modal-title');
-            if (modal && iframe) {
-                modalTitle.textContent = movieTitleText || 'Now Playing';
-                iframe.src = videoUrl;
-                modal.style.display = 'flex';
-            } else {
-                window.open(videoUrl, '_blank');
-            }
-            updateProgressUI(100, '▶ Streaming in player...');
-            downloadProgress.classList.remove('hidden');
-            return;
-        }
-
         downloadProgress.classList.remove('hidden');
         downloadProgress.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        updateProgressUI(100, 'Direct file download started! Check your browser downloads bar.');
+        updateProgressUI(100, '⚡ Direct file download initiated! Your browser is saving the video file.');
 
-        // Trigger direct native attachment download via GET endpoint
+        // Always trigger direct native attachment download via GET stream endpoint
         const streamEndpoint = `/api/movies/stream?url=${encodeURIComponent(videoUrl)}&title=${encodeURIComponent(movieTitleText)}`;
         window.location.href = streamEndpoint;
     });

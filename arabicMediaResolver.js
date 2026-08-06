@@ -1,26 +1,26 @@
 // ======================================================
 // arabicMediaResolver.js - Standalone Arabic Media Scraper
-// Handles 5 target sites: TopCinema, WeCima, Movizland, QFilm, Prestige
+// Handles 6 target sites: TopCinema, WeCima, Movizland, QFilm, Prestige, ArabSeed
 // Zero external dependencies required (uses built-in fetch)
 // ======================================================
 
 const SITE_CONFIGS = {
   topcinema: {
     name: 'TopCinema',
-    baseUrl: 'https://topcinemaa.co',
-    mirrors: ['https://topcinemaa.co', 'https://topcinemaa.cam', 'https://topcinema.site', 'https://topcinema.net'],
+    baseUrl: 'https://web.topcinema.cam',
+    mirrors: ['https://web.topcinema.cam', 'https://topcinemaa.co', 'https://topcinema.site', 'https://topcinema.net'],
     searchPath: '/?s='
   },
   wecima: {
     name: 'WeCima',
-    baseUrl: 'https://wecima.cx',
-    mirrors: ['https://wecima.cx', 'https://wecima.show', 'https://wecima.site', 'https://mycima.cc'],
+    baseUrl: 'https://wecima.club',
+    mirrors: ['https://wecima.club', 'https://mycima.cc', 'https://wecima.cx', 'https://wecima.show', 'https://wecima.site'],
     searchPath: '/search/'
   },
   movizland: {
     name: 'Movizland',
-    baseUrl: 'https://movizland.online',
-    mirrors: ['https://movizland.online', 'https://movizland.com', 'https://movizland.site'],
+    baseUrl: 'https://movizland.cyou',
+    mirrors: ['https://movizland.cyou', 'https://movizland.online', 'https://movizland.com', 'https://movizland.site'],
     searchPath: '/?s='
   },
   qfilm: {
@@ -31,9 +31,15 @@ const SITE_CONFIGS = {
   },
   prestige: {
     name: 'Prestige',
-    baseUrl: 'https://a.prstej.net',
-    mirrors: ['https://a.prstej.net', 'https://brstej.com', 'https://b.prstej.net'],
+    baseUrl: 'https://b.prstej.net',
+    mirrors: ['https://b.prstej.net', 'https://a.prstej.net', 'https://brstej.com'],
     searchPath: '/search.php?keywords='
+  },
+  arabseed: {
+    name: 'ArabSeed',
+    baseUrl: 'https://m.arabseed.net',
+    mirrors: ['https://m.arabseed.net', 'https://arabseed.show', 'https://arabseed.site'],
+    searchPath: '/find/?find='
   }
 };
 
@@ -143,22 +149,27 @@ async function resolveDirectHosterMediaUrl(url) {
     const html = await fetchHtml(url);
     if (!html) return url;
 
-    const subMatch = html.match(/href="([^"]+_[xX])"/i);
-    let targetHtml = html;
-    if (subMatch) {
-      const subUrl = subMatch[1].startsWith('http') ? subMatch[1] : `${new URL(url).origin}${subMatch[1]}`;
-      const subHtml = await fetchHtml(subUrl);
-      if (subHtml) targetHtml = subHtml;
+    // Check direct video / source tags
+    const videoTagMatch = html.match(/<video[^>]*src="([^"]+)"/i) ||
+                          html.match(/<source[^>]*src="([^"]+)"/i);
+    if (videoTagMatch && videoTagMatch[1]) {
+      return videoTagMatch[1];
     }
 
-    const mp4Match = targetHtml.match(/(https?:\/\/[^"'\s\><]+\.mp4[^"'\s\><]*)/i) ||
-                     targetHtml.match(/(https?:\/\/[^"'\s\><]*cdn[^"'\s\><]*\.mp4[^"'\s\><]*)/i) ||
-                     targetHtml.match(/<source [^>]*src="([^"]+)"/i) ||
-                     targetHtml.match(/<video [^>]*src="([^"]+)"/i);
+    // Check for JavaScript file/video variables or direct links
+    const fileVarMatch = html.match(/(?:file|src|url)\s*:\s*["'](https?:\/\/[^"'\s]+\.(?:mp4|mkv)[^"'\s]*)["']/i) ||
+                         html.match(/(https?:\/\/[^"'\s\><]+\.mp4[^"'\s\><]*)/i) ||
+                         html.match(/(https?:\/\/[^"'\s\><]*cdn[^"'\s\><]*\.mp4[^"'\s\><]*)/i);
 
-    if (mp4Match) {
-      console.log(`[ArabicResolver] Extracted direct MP4 stream: ${mp4Match[1]}`);
-      return mp4Match[1];
+    if (fileVarMatch && fileVarMatch[1]) {
+      console.log(`[ArabicResolver] Extracted direct video stream URL: ${fileVarMatch[1]}`);
+      return fileVarMatch[1];
+    }
+
+    const subMatch = html.match(/href="([^"]+_[xX])"/i) || html.match(/href="([^"]+\.mp4[^"]*)"/i);
+    if (subMatch) {
+      const subUrl = subMatch[1].startsWith('http') ? subMatch[1] : `${new URL(url).origin}${subMatch[1]}`;
+      return subUrl;
     }
   } catch (e) {
     console.error('[ArabicResolver] resolveDirectHosterMediaUrl error:', e.message);
@@ -282,7 +293,7 @@ async function searchQFilm(query) {
   return results;
 }
 
-// Prestige Scraper (a.prstej.net/search.php?keywords=)
+// Prestige Scraper
 async function searchPrestige(query) {
   const url = `${SITE_CONFIGS.prestige.baseUrl}/search.php?keywords=${encodeURIComponent(query)}`;
   const html = await fetchHtml(url, SITE_CONFIGS.prestige.mirrors);
@@ -301,7 +312,7 @@ async function searchPrestige(query) {
     let poster = imgMatch ? imgMatch[1] : '';
 
     if (!poster && href.includes('watch.php')) {
-      poster = 'https://a.prstej.net/uploads/articles/dc077189.jpg';
+      poster = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80';
     }
 
     if (title && title.length > 3) {
@@ -319,6 +330,35 @@ async function searchPrestige(query) {
   return results;
 }
 
+// ArabSeed Scraper
+async function searchArabSeed(query) {
+  const url = `${SITE_CONFIGS.arabseed.baseUrl}/find/?find=${encodeURIComponent(query)}`;
+  const html = await fetchHtml(url, SITE_CONFIGS.arabseed.mirrors);
+  if (!html) return [];
+
+  const results = [];
+  const matches = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  for (const m of matches) {
+    let href = m[1];
+    const inner = m[2];
+    const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i);
+
+    if (title && title.length > 3 && !EXCLUDED_PATHS.some(p => href.includes(p))) {
+      if (!href.startsWith('http')) href = `${SITE_CONFIGS.arabseed.baseUrl}${href}`;
+      results.push({
+        id: href,
+        title,
+        poster: imgMatch ? imgMatch[1] : '',
+        source: 'arabseed',
+        sourceName: 'ArabSeed',
+        isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
+      });
+    }
+  }
+  return results;
+}
+
 // Web Search Fallback for Arabic Media
 async function searchWebFallback(query) {
   try {
@@ -327,9 +367,6 @@ async function searchWebFallback(query) {
     if (!html) return [];
 
     const results = [];
-    const matches = [...html.matchAll(/<a [^>]*class="result__snippet"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)] ||
-                    [...html.matchAll(/href="([^"]*(?:wecima|mycima|topcinema|movizland|qfilm|prstej|arabseed)[^"]*)"/gi)];
-    
     const resultBlocks = [...html.matchAll(/<div [^>]*class="result__body"[^>]*>([\s\S]*?)<\/div>/gi)];
     for (const block of resultBlocks) {
       const hrefMatch = block[1].match(/href="([^"]+)"/i) || block[1].match(/uddg=([^"&]+)/i);
@@ -341,7 +378,7 @@ async function searchWebFallback(query) {
           results.push({
             id: href,
             title: title,
-            poster: 'https://a.prstej.net/uploads/articles/dc077189.jpg',
+            poster: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80',
             source: 'WebSearch',
             sourceName: 'Arabic Cinema Index',
             isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
@@ -377,16 +414,25 @@ function isRelevantTitle(title, rawQuery) {
 
 function calculateMatchScore(title, rawQuery) {
   const normTitle = normalizeArabic(title);
+  const normRaw = normalizeArabic(rawQuery);
   const normCore = normalizeArabic(extractCoreQuery(rawQuery));
-  if (normTitle.includes(normCore)) return 100;
-  return 10;
+
+  if (normTitle === normRaw || normTitle === normCore) return 1000;
+  if (normTitle.startsWith(normCore) || normTitle.startsWith(normRaw)) return 500;
+  if (normTitle.includes(normCore) || normTitle.includes(normRaw)) return 200;
+
+  const alias = TITLE_ALIASES[normCore] || TITLE_ALIASES[normRaw];
+  if (alias && normTitle.includes(normalizeArabic(alias))) return 150;
+
+  const words = normCore.split(/\s+/).filter(w => w.length > 1);
+  const matchedWords = words.filter(w => normTitle.includes(w));
+  return matchedWords.length * 50;
 }
 
 function extractSeriesCoreName(title) {
   if (!title) return 'مسلسل';
   let cleaned = normalizeArabic(title);
 
-  // Multi-word ordinals first, then single word ordinals
   const ordinals = [
     'الحاديه والعشرون', 'الثانيه والعشرون', 'الثالثه والعشرون', 'الرابعه والعشرون',
     'الخامسه والعشرون', 'السادسه والعشرون', 'السابعه والعشرون', 'الثامنه والعشرون',
@@ -402,16 +448,15 @@ function extractSeriesCoreName(title) {
   }
 
   cleaned = cleaned
-    .replace(/الحلقه/gi, ' ')
-    .replace(/حلقه/gi, ' ')
-    .replace(/episode/gi, ' ')
-    .replace(/ep/gi, ' ')
+    .replace(/الحلقه\s*\d*/gi, ' ')
+    .replace(/حلقه\s*\d*/gi, ' ')
+    .replace(/episode\s*\d*/gi, ' ')
+    .replace(/ep\s*\d*/gi, ' ')
     .replace(/الموسم\s*(?:الاول|الأول|الثاني|الثالث|الرابع|الخامس|\d+)?/gi, ' ')
     .replace(/موسم\s*(?:الاول|الأول|الثاني|الثالث|الرابع|الخامس|\d+)?/gi, ' ')
-    .replace(/season\s*\d+/gi, ' ')
+    .replace(/season\s*\d*/gi, ' ')
     .replace(/مشاهدة|تحميل|كامل|مترجم|اونلاين|اون|لاين|hd|web-dl|720p|1080p|4k/gi, ' ')
     .replace(/مسلسل/gi, ' ')
-    .replace(/\b\d+\b/g, ' ')
     .replace(/[()\-:\[\]]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
@@ -451,7 +496,7 @@ function groupSeriesResults(results) {
       seriesGroups.set(groupKey, {
         id: item.id,
         title: `مسلسل ${coreName} - ${seasonLabel}`,
-        poster: item.poster || 'https://a.prstej.net/uploads/articles/dc077189.jpg',
+        poster: item.poster || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80',
         source: item.source,
         sourceName: item.sourceName,
         isSeries: true,
@@ -461,7 +506,7 @@ function groupSeriesResults(results) {
     } else {
       const group = seriesGroups.get(groupKey);
       group.episodes.push(item);
-      if ((!group.poster || group.poster.includes('cinema')) && item.poster) {
+      if ((!group.poster || group.poster.includes('prstej')) && item.poster && !item.poster.includes('prstej')) {
         group.poster = item.poster;
       }
     }
@@ -471,7 +516,7 @@ function groupSeriesResults(results) {
   return finalItems;
 }
 
-// Search 5 Target Sites Concurrently
+// Search 6 Target Sites Concurrently
 async function searchAllSites(query) {
   console.log(`[ArabicResolver] Searching all sites for: "${query}"`);
 
@@ -496,6 +541,7 @@ async function searchAllSites(query) {
       searchMovizland(q),
       searchQFilm(q),
       searchPrestige(q),
+      searchArabSeed(q),
       searchWebFallback(q)
     ]);
 
@@ -521,35 +567,20 @@ async function searchAllSites(query) {
 // Deep Page Details Resolver
 async function resolvePageDetails(url) {
   try {
-    const cleanUrl = url.replace(/\/$/, '');
-    const downloadSubUrl = `${cleanUrl}/download/`;
-    const watchSubUrl = `${cleanUrl}/watch/`;
-
-    const [mainHtmlRes, downloadHtmlRes, watchHtmlRes] = await Promise.allSettled([
-      fetchHtml(url),
-      fetchHtml(downloadSubUrl),
-      fetchHtml(watchSubUrl)
-    ]);
-
-    const mainHtml = mainHtmlRes.status === 'fulfilled' && mainHtmlRes.value ? mainHtmlRes.value : '';
-    const downloadHtml = downloadHtmlRes.status === 'fulfilled' && downloadHtmlRes.value ? downloadHtmlRes.value : '';
-    const watchHtml = watchHtmlRes.status === 'fulfilled' && watchHtmlRes.value ? watchHtmlRes.value : '';
-
-    const combinedHtml = `${mainHtml}\n${downloadHtml}\n${watchHtml}`;
-
+    const mainHtml = await fetchHtml(url) || '';
     const titleMatch = mainHtml.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i) || mainHtml.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
     const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : 'Arabic Media Item';
 
     const posterMatch = mainHtml.match(/itemprop="image"\s+content="([^"]+)"/i) ||
                         mainHtml.match(/property="og:image"\s+content="([^"]+)"/i) ||
                         mainHtml.match(/<img [^>]*src="([^"]+\.(?:jpg|png|jpeg|webp))"/i);
-    const poster = posterMatch ? posterMatch[1] : 'https://a.prstej.net/uploads/articles/dc077189.jpg';
+    const poster = posterMatch ? posterMatch[1] : 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80';
 
     const isSeries = /مسلسل|حلقة|موسم|series|season/i.test(title + url);
 
     const downloads = [];
     const watchUrls = [];
-    const linkMatches = [...combinedHtml.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+    const linkMatches = [...mainHtml.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
     
     for (const m of linkMatches) {
       const href = m[1];
@@ -586,7 +617,7 @@ async function resolvePageDetails(url) {
       }
     }
 
-    const iframes = [...combinedHtml.matchAll(/<iframe [^>]*src="([^"]+)"/gi)];
+    const iframes = [...mainHtml.matchAll(/<iframe [^>]*src="([^"]+)"/gi)];
     for (let i = 0; i < iframes.length; i++) {
       const src = iframes[i][1];
       if (src.startsWith('http')) {
@@ -599,8 +630,7 @@ async function resolvePageDetails(url) {
     if (downloads.length === 0) {
       for (const m of linkMatches) {
         const href = m[1];
-        const text = m[2].replace(/<[^>]+>/g, '').trim();
-        if (href.startsWith('http') && !href.includes('topcinemaa.co') && !href.includes('wecima') && href.length > 15) {
+        if (href.startsWith('http') && !href.includes('topcinema') && !href.includes('wecima') && href.length > 15) {
           let hostName = 'Direct Server';
           try { hostName = new URL(href).hostname.replace('www.', ''); } catch (e) {}
           downloads.push({
@@ -615,7 +645,7 @@ async function resolvePageDetails(url) {
 
     if (downloads.length === 0) {
       downloads.push({
-        quality: '1080p Direct Mirror Link',
+        quality: '1080p Direct Download File',
         url: url,
         host: 'Direct Server',
         size: 'Direct Stream'
@@ -652,7 +682,7 @@ async function resolvePageDetails(url) {
       type: 'movie',
       title: 'Arabic Media Item',
       poster: '',
-      downloads: [{ quality: '1080p Direct Stream', url, host: 'Direct Host', size: 'Direct Stream' }],
+      downloads: [{ quality: '1080p Direct File Download', url, host: 'Direct Host', size: 'Direct Stream' }],
       watchUrls: [{ server: 'Direct Server', url }],
       episodes: []
     };
@@ -660,41 +690,7 @@ async function resolvePageDetails(url) {
 }
 
 async function fetchAndMergeCompleteSeries(title, primaryEpisodes = [], primarySource = 'Primary') {
-  try {
-    const otherResults = await searchAllSites(title);
-    const episodeMap = new Map();
-
-    for (const ep of primaryEpisodes) {
-      episodeMap.set(ep.number, {
-        number: ep.number,
-        title: ep.title || `Episode ${ep.number}`,
-        url: ep.url,
-        source: primarySource
-      });
-    }
-
-    for (const resItem of otherResults) {
-      if (resItem.sourceName !== primarySource && resItem.isSeries) {
-        try {
-          const details = await resolvePageDetails(resItem.id);
-          for (const ep of (details.episodes || [])) {
-            if (!episodeMap.has(ep.number)) {
-              episodeMap.set(ep.number, {
-                number: ep.number,
-                title: ep.title || `Episode ${ep.number}`,
-                url: ep.url,
-                source: resItem.sourceName
-              });
-            }
-          }
-        } catch (err) {}
-      }
-    }
-
-    return Array.from(episodeMap.values()).sort((a, b) => a.number - b.number);
-  } catch (e) {
-    return primaryEpisodes;
-  }
+  return primaryEpisodes;
 }
 
 module.exports = {

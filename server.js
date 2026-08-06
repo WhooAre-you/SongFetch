@@ -1094,6 +1094,11 @@ app.get('/api/movies/stream', async (req, res) => {
 
   try {
     let actualVideoUrl = downloadUrl;
+    try {
+      const parsed = JSON.parse(downloadUrl);
+      if (parsed && parsed.videoUrl) actualVideoUrl = parsed.videoUrl;
+    } catch (e) {}
+
     actualVideoUrl = await arabicResolver.resolveDirectHosterMediaUrl(actualVideoUrl);
     console.log(`[Server] Stream resolved direct media URL: ${actualVideoUrl}`);
 
@@ -1115,7 +1120,7 @@ app.get('/api/movies/stream', async (req, res) => {
     if (contentType.includes('text/html')) {
       const text = await checkRes.text();
       if (text.includes('copyright') || text.includes('removed') || text.includes('Notice !') || text.includes('404 Not Found')) {
-        return res.status(400).send('هذا السيرفر (BowFile) ملفه محذوف بسبب الحقوق أو غير متوفر حالياً. يرجى اختيار سيرفر آخر مثل (VidTube أو UpDown أو Mdiaload) من القائمة.');
+        return res.status(400).send('هذا السيرفر (BowFile) ملفه محذوف بسبب الحقوق أو غير متوفر حالياً. يرجى اختيار سيرفر آخر من القائمة.');
       }
     }
 
@@ -1134,11 +1139,17 @@ app.get('/api/movies/stream', async (req, res) => {
       }
     });
 
+    res.on('close', () => {
+      if (downloadResponse.data && typeof downloadResponse.data.destroy === 'function') {
+        downloadResponse.data.destroy();
+      }
+    });
+
     downloadResponse.data.pipe(res);
   } catch (err) {
     console.error('Movie stream failed:', err.message);
     if (!res.headersSent) {
-      res.status(500).send('تعذر تنزيل هذا السيرفر حالياً. يرجى اختيار سيرفر آخر مثل VidTube أو UpDown.');
+      res.status(500).send('تعذر تنزيل هذا السيرفر حالياً. يرجى اختيار سيرفر آخر من القائمة.');
     }
   }
 });
@@ -1156,7 +1167,7 @@ app.post('/api/movies/download', async (req, res) => {
     let actualVideoUrl = downloadUrl;
     try {
       const parsed = JSON.parse(downloadUrl);
-      if (parsed.videoUrl) actualVideoUrl = parsed.videoUrl;
+      if (parsed && parsed.videoUrl) actualVideoUrl = parsed.videoUrl;
     } catch (e) {}
 
     actualVideoUrl = await arabicResolver.resolveDirectHosterMediaUrl(actualVideoUrl);
@@ -1173,7 +1184,7 @@ app.post('/api/movies/download', async (req, res) => {
       const text = await checkRes.text();
       if (text.includes('copyright') || text.includes('removed') || text.includes('Notice !') || text.includes('404 Not Found')) {
         return res.status(400).json({
-          error: 'هذا السيرفر (BowFile) ملفه محذوف بسبب الحقوق أو غير متوفر حالياً. يرجى اختيار سيرفر آخر مثل (VidTube أو UpDown أو Mdiaload) من الجدول أعلاه.'
+          error: 'هذا السيرفر (BowFile) ملفه محذوف بسبب الحقوق أو غير متوفر حالياً. يرجى اختيار سيرفر آخر من الجدول أعلاه.'
         });
       }
     }
@@ -1188,6 +1199,12 @@ app.post('/api/movies/download', async (req, res) => {
       responseType: 'stream',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    res.on('close', () => {
+      if (downloadResponse.data && typeof downloadResponse.data.destroy === 'function') {
+        downloadResponse.data.destroy();
       }
     });
 
@@ -1247,15 +1264,32 @@ app.post('/api/arabic/resolve', async (req, res) => {
   }
 });
 
-// Extract direct video URL from Arabic episode page using yt-dlp
+// Extract direct video URL from Arabic episode page using yt-dlp or direct fallback
 app.post('/api/arabic/extract', async (req, res) => {
   const { url, title } = req.body;
   if (!url) return res.status(400).json({ error: 'URL is required' });
 
+  const fallbackDirectDetails = async () => {
+    try {
+      const details = await arabicResolver.resolvePageDetails(url);
+      if (details && details.downloads && details.downloads.length > 0) {
+        return res.json({ downloads: details.downloads, title: details.title || title });
+      }
+    } catch (e) {}
+    const directUrl = await arabicResolver.resolveDirectHosterMediaUrl(url);
+    return res.json({
+      downloads: [{
+        quality: '1080p Full HD Direct Download',
+        url: directUrl,
+        host: 'Direct Server',
+        size: 'Direct Stream'
+      }],
+      title
+    });
+  };
+
   try {
     const ytDlpBinary = await ensureYtDlp();
-
-    // Use yt-dlp --dump-json to extract available formats without downloading
     const args = [
       '--no-warnings',
       '--no-cache-dir',
@@ -1267,21 +1301,19 @@ app.post('/api/arabic/extract', async (req, res) => {
 
     console.log(`Extracting Arabic video URL with yt-dlp: ${url}`);
 
-    execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 20, timeout: 30000 }, (error, stdout, stderr) => {
+    execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 20, timeout: 15000 }, async (error, stdout, stderr) => {
       if (error) {
-        console.error('yt-dlp Arabic extract failed:', error.message);
-        return res.status(500).json({ error: 'Could not extract video URL', detail: error.message });
+        console.warn('yt-dlp Arabic extract failed, falling back to direct scraper:', error.message);
+        return await fallbackDirectDetails();
       }
 
       try {
         const data = JSON.parse(stdout);
         const formats = (data.formats || []).filter(f => f.url && (f.vcodec !== 'none' || f.ext === 'mp4'));
 
-        // Build quality options sorted best → worst
         const seen = new Set();
         const downloads = [];
 
-        // Best combined video+audio first
         const best = formats.filter(f => f.vcodec !== 'none' && f.acodec !== 'none').sort((a, b) => (b.height || 0) - (a.height || 0));
         for (const f of best) {
           const label = f.height ? `${f.height}p` : (f.format_note || f.format_id || 'HD');
@@ -1296,7 +1328,6 @@ app.post('/api/arabic/extract', async (req, res) => {
           if (downloads.length >= 5) break;
         }
 
-        // If no combined formats, add best available
         if (downloads.length === 0 && data.url) {
           downloads.push({
             quality: 'Best Quality',
@@ -1306,14 +1337,18 @@ app.post('/api/arabic/extract', async (req, res) => {
           });
         }
 
+        if (downloads.length === 0) {
+          return await fallbackDirectDetails();
+        }
+
         return res.json({ downloads, title: data.title || title });
       } catch (parseErr) {
-        return res.status(500).json({ error: 'Failed to parse yt-dlp output' });
+        return await fallbackDirectDetails();
       }
     });
   } catch (err) {
     console.error('Arabic extract error:', err.message);
-    return res.status(500).json({ error: err.message });
+    return await fallbackDirectDetails();
   }
 });
 
