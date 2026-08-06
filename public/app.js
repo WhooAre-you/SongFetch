@@ -45,6 +45,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentSongData = null;
 
+    // Audio preview state
+    let currentAudio = null;
+    let audioState = { track: null, isPlaying: false, isLoading: false };
+    const playerBar = document.getElementById('audio-player-bar');
+    const playerPlayBtn = document.getElementById('player-play-btn');
+    const playerProgress = document.getElementById('player-progress');
+    const playerTimeCurrent = document.getElementById('player-time-current');
+    const playerTimeTotal = document.getElementById('player-time-total');
+
     // Show/hide clear button on input change
     searchInput.addEventListener('input', () => {
         if (searchInput.value.trim().length > 0) {
@@ -104,6 +113,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (songFilesize) {
             songFilesize.textContent = '';
         }
+
+        // Stop any playing audio
+        stopAudioPreview();
+        resetPlayerBar();
     }
 
     // Update progress bar UI
@@ -204,6 +217,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             </div>
                         </div>
                         <div class="playlist-track-actions">
+                            <button class="playlist-track-play-btn" title="Play preview" id="play-btn-${index}">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                            </button>
                             <button class="playlist-track-preview-btn" title="Preview song details" id="preview-btn-${index}">
                                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                     <circle cx="11" cy="11" r="8"></circle>
@@ -221,6 +239,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     `;
                     
                     playlistTracksList.appendChild(row);
+
+                    // Play button — stream audio preview
+                    const playBtn = row.querySelector('.playlist-track-play-btn');
+                    playBtn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        await playAudioPreview(track, playBtn);
+                    });
 
                     // Download button
                     const btn = row.querySelector('.playlist-track-download-btn');
@@ -302,9 +327,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 songAlbum.textContent = data.album || 'Single';
                 lyricsText.textContent = data.lyrics || 'Lyrics not found on Genius.';
 
-                // Show result section
+                // Show result section and player bar
                 resultSection.classList.remove('hidden');
                 fetchAndDisplaySongSize(currentSongData);
+                initPlayerBar(currentSongData);
             }
 
         } catch (error) {
@@ -478,6 +504,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             resultSection.classList.remove('hidden');
             fetchAndDisplaySongSize(currentSongData);
+            initPlayerBar(currentSongData);
 
             // Smoothly scroll to the result card
             resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -594,6 +621,196 @@ document.addEventListener('DOMContentLoaded', () => {
         playlistProgressStatus.textContent = `Finished! Successfully downloaded ${successCount} out of ${total} tracks.`;
         downloadAllBtn.disabled = false;
     }
+    // ─── Audio Preview System ────────────────────────────────────────
+
+    function formatAudioTime(secs) {
+        if (isNaN(secs) || !isFinite(secs)) return '0:00';
+        const mins = Math.floor(secs / 60);
+        const s = Math.floor(secs % 60);
+        return `${mins}:${s.toString().padStart(2, '0')}`;
+    }
+
+    function buildStreamUrl(track) {
+        if (track.youtubeUrl && track.youtubeUrl.startsWith('http')) {
+            return `/api/songfetch/stream?url=${encodeURIComponent(track.youtubeUrl)}`;
+        }
+        return `/api/songfetch/stream?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}`;
+    }
+
+    function stopAudioPreview() {
+        if (currentAudio) {
+            currentAudio.pause();
+            currentAudio.src = '';
+            currentAudio = null;
+        }
+        audioState.isPlaying = false;
+        audioState.isLoading = false;
+        // Reset all playlist play buttons
+        document.querySelectorAll('.playlist-track-play-btn').forEach(btn => {
+            btn.classList.remove('playing');
+            btn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+        });
+    }
+
+    function resetPlayerBar() {
+        playerProgress.value = 0;
+        playerTimeCurrent.textContent = '0:00';
+        playerTimeTotal.textContent = '0:00';
+        const playIcon = playerPlayBtn.querySelector('.play-icon');
+        const pauseIcon = playerPlayBtn.querySelector('.pause-icon');
+        const spinner = playerPlayBtn.querySelector('.player-loading-spinner');
+        playIcon.classList.remove('hidden');
+        pauseIcon.classList.add('hidden');
+        spinner.classList.add('hidden');
+    }
+
+    function initPlayerBar(track) {
+        // Stop current audio if different track
+        if (audioState.track && (audioState.track.title !== track.title || audioState.track.artist !== track.artist)) {
+            stopAudioPreview();
+            resetPlayerBar();
+        }
+        audioState.track = track;
+        // If nothing is playing, show the bar in paused state
+        if (!audioState.isPlaying) {
+            resetPlayerBar();
+        }
+    }
+
+    function updatePlayerBarIcons() {
+        const playIcon = playerPlayBtn.querySelector('.play-icon');
+        const pauseIcon = playerPlayBtn.querySelector('.pause-icon');
+        const spinner = playerPlayBtn.querySelector('.player-loading-spinner');
+
+        if (audioState.isLoading) {
+            playIcon.classList.add('hidden');
+            pauseIcon.classList.add('hidden');
+            spinner.classList.remove('hidden');
+        } else if (audioState.isPlaying && currentAudio && !currentAudio.paused) {
+            playIcon.classList.add('hidden');
+            pauseIcon.classList.remove('hidden');
+            spinner.classList.add('hidden');
+        } else {
+            playIcon.classList.remove('hidden');
+            pauseIcon.classList.add('hidden');
+            spinner.classList.add('hidden');
+        }
+    }
+
+    async function playAudioPreview(track, triggerBtn) {
+        const isSameTrack = audioState.track && 
+            audioState.track.title === track.title && 
+            audioState.track.artist === track.artist;
+
+        // If clicking the same track that is playing, toggle pause/play
+        if (isSameTrack && currentAudio) {
+            if (audioState.isPlaying) {
+                currentAudio.pause();
+                audioState.isPlaying = false;
+                if (triggerBtn) {
+                    triggerBtn.classList.remove('playing');
+                    triggerBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+                }
+                updatePlayerBarIcons();
+                return;
+            } else {
+                currentAudio.play();
+                audioState.isPlaying = true;
+                if (triggerBtn) {
+                    triggerBtn.classList.add('playing');
+                    triggerBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+                }
+                updatePlayerBarIcons();
+                return;
+            }
+        }
+
+        // Different track or no audio — stop current and start new
+        stopAudioPreview();
+        resetPlayerBar();
+
+        audioState.track = track;
+        audioState.isLoading = true;
+        audioState.isPlaying = false;
+
+        if (triggerBtn) {
+            triggerBtn.classList.add('playing');
+            triggerBtn.innerHTML = `<span class="spinner-mini"></span>`;
+        }
+        updatePlayerBarIcons();
+
+        try {
+            const streamUrl = buildStreamUrl(track);
+            currentAudio = new Audio(streamUrl);
+            currentAudio.preload = 'auto';
+
+            currentAudio.addEventListener('playing', () => {
+                audioState.isLoading = false;
+                audioState.isPlaying = true;
+                if (triggerBtn) {
+                    triggerBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+                }
+                updatePlayerBarIcons();
+            });
+
+            currentAudio.addEventListener('timeupdate', () => {
+                if (!currentAudio) return;
+                const cur = currentAudio.currentTime;
+                const dur = currentAudio.duration || 0;
+                if (dur > 0) {
+                    playerProgress.value = (cur / dur) * 100;
+                }
+                playerTimeCurrent.textContent = formatAudioTime(cur);
+                playerTimeTotal.textContent = formatAudioTime(dur);
+            });
+
+            currentAudio.addEventListener('ended', () => {
+                audioState.isPlaying = false;
+                if (triggerBtn) {
+                    triggerBtn.classList.remove('playing');
+                    triggerBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+                }
+                updatePlayerBarIcons();
+            });
+
+            currentAudio.addEventListener('error', () => {
+                console.error('Audio playback error');
+                audioState.isPlaying = false;
+                audioState.isLoading = false;
+                if (triggerBtn) {
+                    triggerBtn.classList.remove('playing');
+                    triggerBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+                }
+                resetPlayerBar();
+                updatePlayerBarIcons();
+            });
+
+            await currentAudio.play();
+        } catch (err) {
+            console.error('Failed to play audio:', err);
+            audioState.isPlaying = false;
+            audioState.isLoading = false;
+            if (triggerBtn) {
+                triggerBtn.classList.remove('playing');
+                triggerBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+            }
+            resetPlayerBar();
+            updatePlayerBarIcons();
+        }
+    }
+
+    // Player bar play/pause button
+    playerPlayBtn.addEventListener('click', async () => {
+        if (!audioState.track) return;
+        await playAudioPreview(audioState.track, null);
+    });
+
+    // Player bar seek slider
+    playerProgress.addEventListener('input', () => {
+        if (currentAudio && currentAudio.duration) {
+            currentAudio.currentTime = (playerProgress.value / 100) * currentAudio.duration;
+        }
+    });
 });
 
 /* ─── PWA Install Logic ───────────────────────────────────────────── */

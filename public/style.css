@@ -1251,6 +1251,176 @@ body {
 
 
 /* -------------------------------------------------
+   Audio Preview Player Bar
+   ------------------------------------------------- */
+
+.audio-player-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    padding: 0.7rem 1rem;
+    border-radius: var(--radius-md);
+    margin-top: 1.2rem;
+    width: 100%;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.player-control-btn {
+    background: var(--color-gradient);
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: 0 4px 18px rgba(139, 92, 246, 0.35);
+    transition: var(--transition-smooth);
+    flex-shrink: 0;
+    position: relative;
+}
+
+.player-control-btn:hover {
+    transform: scale(1.08);
+    box-shadow: 0 6px 24px rgba(139, 92, 246, 0.55);
+}
+
+.player-control-btn:active {
+    transform: scale(0.95);
+}
+
+.player-control-btn .play-icon {
+    margin-left: 2px; /* Visual centering for triangle */
+}
+
+.player-loading-spinner {
+    width: 18px;
+    height: 18px;
+    border: 2.5px solid rgba(255,255,255,0.25);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    position: absolute;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.player-progress-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    min-width: 0;
+}
+
+/* Custom range slider */
+.player-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 5px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.1);
+    outline: none;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.player-slider::-webkit-slider-runnable-track {
+    height: 5px;
+    border-radius: 3px;
+}
+
+.player-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    cursor: pointer;
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.6);
+    margin-top: -4.5px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.player-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.25);
+    box-shadow: 0 0 16px rgba(139, 92, 246, 0.8);
+}
+
+.player-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.6);
+}
+
+.player-time-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    font-family: var(--font-secondary);
+    color: var(--color-text-muted);
+    letter-spacing: 0.03em;
+}
+
+/* Playlist play button */
+.playlist-track-play-btn {
+    background: rgba(139, 92, 246, 0.12);
+    border: 1px solid rgba(139, 92, 246, 0.2);
+    color: var(--color-primary);
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+}
+
+.playlist-track-play-btn:hover {
+    background: rgba(139, 92, 246, 0.25);
+    border-color: rgba(139, 92, 246, 0.4);
+    transform: scale(1.1);
+}
+
+.playlist-track-play-btn.playing {
+    background: var(--color-primary);
+    color: white;
+    box-shadow: 0 0 12px rgba(139, 92, 246, 0.5);
+}
+
+.playlist-track-play-btn .spinner-mini {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(139, 92, 246, 0.3);
+    border-top-color: var(--color-primary);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+}
+
+.playlist-track-play-btn.playing .spinner-mini {
+    border-color: rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+}
+
+
+/* -------------------------------------------------
    Responsive Layout – Mobile
    ------------------------------------------------- */
 

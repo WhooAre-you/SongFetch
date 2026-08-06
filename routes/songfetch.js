@@ -3,7 +3,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const nodeID3 = require('node-id3');
 const ffmpegPath = require('ffmpeg-static');
 const { resolveYouTubePlaylist, resolveSoundCloudPlaylist } = require('../playlistResolvers');
@@ -730,6 +730,79 @@ router.post('/api/songfetch/size', async (req, res) => {
     });
   } catch (err) {
     res.json({ size: 'Unknown size' });
+  }
+});
+
+// Route: Stream audio on the fly
+router.get('/api/songfetch/stream', async (req, res) => {
+  const { url, title, artist } = req.query;
+
+  let streamUrl = url;
+  if (!streamUrl && title && artist) {
+    streamUrl = `ytsearch1:${artist} - ${title} (Official Audio)`;
+  }
+
+  if (!streamUrl) {
+    return res.status(400).json({ error: 'URL or title/artist is required' });
+  }
+
+  try {
+    const ytDlpBinary = await ensureYtDlp();
+    
+    // Set response headers for audio streaming
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Transfer-Encoding', 'chunked');
+
+    console.log(`Starting audio stream using yt-dlp to stdout for: ${streamUrl}`);
+
+    const ytdlpArgs = [
+      '--js-runtimes', 'node',
+      '--impersonate', 'chrome',
+      '--no-cache-dir',
+      '-f', 'bestaudio',
+      '-o', '-',
+      streamUrl
+    ];
+
+    const ytdlpProc = spawn(ytDlpBinary, ytdlpArgs);
+
+    const ffmpegArgs = [
+      '-i', 'pipe:0',
+      '-codec:a', 'libmp3lame',
+      '-b:a', '128k',
+      '-f', 'mp3',
+      'pipe:1'
+    ];
+
+    const ffmpegProc = spawn(ffmpegPath, ffmpegArgs);
+
+    // Pipe ytdlp output to ffmpeg input
+    ytdlpProc.stdout.pipe(ffmpegProc.stdin);
+
+    // Pipe ffmpeg output to express response
+    ffmpegProc.stdout.pipe(res);
+
+    // Error handling
+    ytdlpProc.on('error', (err) => {
+      console.error('ytdlp streaming error:', err.message);
+    });
+
+    ffmpegProc.on('error', (err) => {
+      console.error('ffmpeg streaming error:', err.message);
+    });
+
+    // Cleanup when request is closed
+    req.on('close', () => {
+      console.log('Streaming connection closed by client, killing processes...');
+      try { ytdlpProc.kill(); } catch (e) {}
+      try { ffmpegProc.kill(); } catch (e) {}
+    });
+
+  } catch (error) {
+    console.error('Stream setup failed:', error.message);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to initialize audio stream.' });
+    }
   }
 });
 

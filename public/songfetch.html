@@ -160,6 +160,27 @@
                             </button>
                             <p id="song-filesize" class="song-filesize-text"></p>
                         </div>
+
+                        <!-- Audio Preview Player -->
+                        <div class="audio-player-bar" id="audio-player-bar">
+                            <button id="player-play-btn" class="player-control-btn" title="Play preview">
+                                <svg class="play-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                </svg>
+                                <svg class="pause-icon hidden" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                                    <rect x="6" y="4" width="4" height="16"></rect>
+                                    <rect x="14" y="4" width="4" height="16"></rect>
+                                </svg>
+                                <span class="player-loading-spinner hidden"></span>
+                            </button>
+                            <div class="player-progress-container">
+                                <input type="range" id="player-progress" min="0" max="100" value="0" step="0.1" class="player-slider">
+                                <div class="player-time-info">
+                                    <span id="player-time-current">0:00</span>
+                                    <span id="player-time-total">0:00</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
