@@ -131,7 +131,7 @@ router.post('/api/mediafetch/info', async (req, res) => {
     // If it is Facebook, try the Snapsave scraper first (as it gets HD/SD direct links)
     if (platform === 'facebook') {
       try {
-        console.log('Attempting Snapsave extraction for Facebook video:', url);
+        console.log('Attempting Snapsave extraction for Facebook media:', url);
         const snapsaveRes = await axios.post('https://snapsave.app/action.php', qs.stringify({ url }), {
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
@@ -147,28 +147,50 @@ router.post('/api/mediafetch/info', async (req, res) => {
           const cleanHtml = extractHtmlFromJs(decodedHtml);
           const $fb = cheerio.load(cleanHtml);
           const formats = [];
+          const images = [];
           
           $fb('a').each((i, el) => {
             const href = $fb(el).attr('href');
-            if (href && (href.startsWith('http') || href.includes('video'))) {
+            if (href && href.startsWith('http')) {
               const text = $fb(el).text().trim() || 'Download';
               if (href.includes('download-private') || (href.includes('facebook.com') && !href.includes('video'))) {
                 return;
               }
               const cleanUrl = href.replace(/\\/g, '');
-              const qualityText = text.replace(/Download/i, '').trim() || 'Best Quality';
-              formats.push({
-                height: qualityText,
-                size: 'Direct Link',
-                url: cleanUrl
-              });
+              if (text.toLowerCase().includes('photo') || cleanUrl.includes('.jpg') || cleanUrl.includes('.png') || cleanUrl.includes('.webp')) {
+                if (!images.includes(cleanUrl)) {
+                  images.push(cleanUrl);
+                }
+              } else {
+                const qualityText = text.replace(/Download/i, '').trim() || 'Best Quality';
+                formats.push({
+                  height: qualityText,
+                  size: 'Direct Link',
+                  url: cleanUrl
+                });
+              }
             }
           });
+
+          if (images.length > 0) {
+            console.log(`Successfully extracted ${images.length} Facebook slideshow images from Snapsave.`);
+            const firstImgSize = await getRemoteFileSize(images[0]);
+            return res.json({
+              title: `Facebook Post (${new Date().toLocaleDateString()})`,
+              thumbnail: images[0],
+              duration: 'Slideshow',
+              uploader: 'Facebook User',
+              platform: 'facebook',
+              formats: [],
+              images: images.map((img, idx) => ({ index: idx, url: img })),
+              audioSize: 'Unknown size',
+              bestSize: firstImgSize ? `${formatSize(firstImgSize)} per photo` : 'Unknown size'
+            });
+          }
 
           if (formats.length > 0) {
             console.log(`Successfully extracted ${formats.length} Facebook formats from Snapsave.`);
             
-            // Resolve accurate remote filesizes concurrently
             const resolvedFormats = await Promise.all(formats.map(async f => {
               const sizeBytes = await getRemoteFileSize(f.url);
               return {
