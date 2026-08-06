@@ -477,12 +477,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     rawEpisodes = data.episodes;
                 }
 
+                function parseArabicEpisodeNumber(text, fallbackIdx) {
+                    if (!text) return fallbackIdx;
+                    const digitMatch = text.match(/(?:حلقة|الحلقة|Episode|ep)\s*(\d+)/i) || text.match(/\b(\d+)\b/);
+                    if (digitMatch) return parseInt(digitMatch[1], 10);
+
+                    const ordinalMap = {
+                        'الاولى': 1, 'الاول': 1, 'الثانيه': 2, 'الثاني': 2, 'الثالثه': 3, 'الثالث': 3,
+                        'الرابعه': 4, 'الرابع': 4, 'الخامسه': 5, 'الخامس': 5, 'السادسه': 6, 'السادس': 6,
+                        'السابعه': 7, 'السابع': 7, 'الثامنه': 8, 'الثامن': 8, 'التاسعه': 9, 'التاسع': 9,
+                        'العاشره': 10, 'العاشر': 10, 'الحاديه عشر': 11, 'الثانيه عشر': 12, 'الثالثه عشر': 13,
+                        'الرابعه عشر': 14, 'الخامسه عشر': 15, 'السادسه عشر': 16, 'السابعه عشر': 17,
+                        'الثامنه عشر': 18, 'التاسعه عشر': 19, 'العشرون': 20, 'الحاديه والعشرون': 21,
+                        'الثانيه والعشرون': 22, 'الثالثه والعشرون': 23, 'الرابعه والعشرون': 24,
+                        'الخامسه والعشرون': 25, 'السادسه والعشرون': 26, 'السابعه والعشرون': 27,
+                        'الثامنه والعشرون': 28, 'التاسعه والعشرون': 29, 'الثلاثون': 30
+                    };
+                    for (const [key, val] of Object.entries(ordinalMap)) {
+                        if (text.includes(key)) return val;
+                    }
+                    return fallbackIdx;
+                }
+
                 // Parse episode numbers and sort numerically
                 const parsedEpisodes = rawEpisodes.map((ep, idx) => {
-                    const epText = ep.text || '';
-                    const epMatch = epText.match(/(?:حلقة|الحلقة|Episode)\s*(\d+)/i);
-                    const epNum = epMatch ? parseInt(epMatch[1]) : (idx + 1);
-                    // Always use "Ep. N" format — never strip to raw English noise like "HD"
+                    const epText = ep.text || ep.title || '';
+                    const epNum = parseArabicEpisodeNumber(epText, idx + 1);
                     const epLabel = `Ep. ${epNum}`;
                     return { ...ep, epNum, epLabel };
                 });

@@ -382,6 +382,26 @@ function calculateMatchScore(title, rawQuery) {
   return 10;
 }
 
+function extractSeriesCoreName(title) {
+  if (!title) return 'مسلسل';
+  let cleaned = normalizeArabic(title);
+  
+  // Remove episode keywords and Arabic numbers/ordinals
+  cleaned = cleaned
+    .replace(/الحلقه\s*(?:الاولى|الثانيه|الثالثه|الرابعه|الخامسه|السادسه|السابعه|الثامنه|التاسعه|العاشره|الحاديه\s*عشر|الثانيه\s*عشر|الثالثه\s*عشر|الرابعه\s*عشر|الخامسه\s*عشر|السادسه\s*عشر|السابعه\s*عشر|الثامنه\s*عشر|التاسعه\s*عشر|العشرون|الحاديه\s*والعشرون|الثانيه\s*والعشرون|الثالثه\s*والعشرون|الرابعه\s*والعشرون|الخامسه\s*والعشرون|السادسه\s*والعشرون|السابعه\s*والعشرون|الثامنه\s*والعشرون|التاسعه\s*والعشرون|الثلاثون|\d+)?/gi, '')
+    .replace(/حلقه\s*(?:الاولى|الثانيه|الثالثه|الرابعه|الخامسه|السادسه|السابعه|الثامنه|التاسعه|العاشره|\d+)?/gi, '')
+    .replace(/episode\s*\d+|ep\s*\d+/gi, '')
+    .replace(/الموسم\s*(?:الاول|الأول|الثاني|الثالث|الرابع|الخامس|\d+)/gi, '')
+    .replace(/موسم\s*(?:الاول|الأول|الثاني|الثالث|الرابع|الخامس|\d+)/gi, '')
+    .replace(/مشاهدة|تحميل|كامل|مترجم|اونلاين|اون|لاين|hd|720p|1080p|4k/gi, '')
+    .replace(/مسلسل/gi, '')
+    .replace(/[()\-:\[\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned || title;
+}
+
 // Group individual episode items into clean Season Cards for TV Series
 function groupSeriesResults(results) {
   const finalItems = [];
@@ -406,22 +426,7 @@ function groupSeriesResults(results) {
       seasonNum = 4;
     }
 
-    let coreName = extractCoreQuery(item.title)
-      .replace(/الحلقة\s*\d+|حلقة\s*\d+|episode\s*\d+|ep\s*\d+|\d+$/gi, '')
-      .replace(/الموسم\s*\d+|موسم\s*\d+|season\s*\d+/gi, '')
-      .replace(/الموسم\s*(?:الاول|الأول|الثاني|الثالث|الرابع|الخامس)/gi, '')
-      .trim();
-
-    if (!coreName || coreName.length < 2) {
-      coreName = item.title
-        .replace(/الحلقة\s*\d+|حلقة\s*\d+|episode\s*\d+|ep\s*\d+|\d+$/gi, '')
-        .replace(/الموسم\s*\d+|موسم\s*\d+|season\s*\d+/gi, '')
-        .trim();
-    }
-    if (!coreName || coreName.length < 2) {
-      coreName = item.title;
-    }
-
+    const coreName = extractSeriesCoreName(item.title);
     const groupKey = `${coreName}_season_${seasonNum}`;
 
     if (!seriesGroups.has(groupKey)) {
