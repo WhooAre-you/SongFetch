@@ -1,7 +1,7 @@
 {
-  "name": "songfetch",
+  "name": "omnifetch",
   "version": "1.0.0",
-  "description": "Download MP3s with embedded cover art and lyrics from Spotify, YouTube, SoundCloud, or raw search.",
+  "description": "Unified downloader suite for music, video and photo collections.",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -18,13 +18,16 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@mrnima/tiktok-downloader": "^1.0.0",
     "adm-zip": "^0.6.0",
     "axios": "^1.7.2",
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "ffmpeg-static": "^5.2.0",
+    "instagram-url-direct": "^2.0.7",
     "node-id3": "^0.2.6",
+    "tiklydown-sanzy": "^1.0.0",
     "ws": "^8.21.2",
     "youtube-sr": "^4.3.12",
     "yt-search": "^2.13.1"

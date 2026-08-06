@@ -1,7 +1,7 @@
 {
-  "name": "SongFetch 1.0",
-  "short_name": "SongFetch",
-  "description": "Convert song links or search names into tagged, lyrics-embedded MP3 files.",
+  "name": "OmniFetch 1.0",
+  "short_name": "OmniFetch",
+  "description": "Convert song and media links into tagged, lyrics-embedded MP3 or download videos and photo collections.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0d0e12",

@@ -1,7 +1,7 @@
 /* ==========================================
-   MEDIAFETCH THEME VARIABLES
+   OMNIFETCH THEME VARIABLES
    ========================================== */
-.mediafetch-theme {
+.omnifetch-theme {
     --color-primary: #6366f1;
     --color-primary-glow: rgba(99, 102, 241, 0.25);
     --color-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #f43f5e 100%);
@@ -9,15 +9,15 @@
     --theme-glow-2: radial-gradient(circle, rgba(244, 63, 94, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
 }
 
-.mediafetch-theme .glow-1 {
+.omnifetch-theme .glow-1 {
     background: var(--theme-glow-1);
 }
 
-.mediafetch-theme .glow-2 {
+.omnifetch-theme .glow-2 {
     background: var(--theme-glow-2);
 }
 
-.mediafetch-theme .logo svg {
+.omnifetch-theme .logo svg {
     stroke: #6366f1;
     filter: drop-shadow(0px 4px 12px rgba(99, 102, 241, 0.4));
 }
@@ -27,7 +27,7 @@
    ========================================== */
 .gateway-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     gap: 1.5rem;
     margin-top: 1rem;
     margin-bottom: 2rem;
@@ -68,7 +68,7 @@
     background: radial-gradient(circle, rgba(139, 92, 246, 0.08) 0%, rgba(0, 0, 0, 0) 60%);
 }
 
-.videofetch-card .card-glow {
+.mediafetch-card .card-glow {
     background: radial-gradient(circle, rgba(244, 63, 94, 0.08) 0%, rgba(0, 0, 0, 0) 60%);
 }
 
@@ -93,7 +93,7 @@
     box-shadow: 0 8px 24px rgba(139, 92, 246, 0.1);
 }
 
-.videofetch-card .card-icon-container {
+.mediafetch-card .card-icon-container {
     background: rgba(244, 63, 94, 0.08);
     border: 1px solid rgba(244, 63, 94, 0.2);
     color: #f43f5e;
@@ -210,30 +210,30 @@
     box-shadow: 0 4px 16px rgba(139, 92, 246, 0.15);
 }
 
-/* VideoFetch Hover */
-.videofetch-card:hover {
+/* MediaFetch Hover */
+.mediafetch-card:hover {
     border-color: rgba(244, 63, 94, 0.35);
     box-shadow: 0 12px 40px rgba(244, 63, 94, 0.12), inset 0 0 16px rgba(244, 63, 94, 0.05);
 }
 
-.videofetch-card:hover h2 {
+.mediafetch-card:hover h2 {
     color: #f43f5e;
 }
 
-.videofetch-card:hover .card-icon-container {
+.mediafetch-card:hover .card-icon-container {
     background: rgba(244, 63, 94, 0.15);
     border-color: rgba(244, 63, 94, 0.4);
     box-shadow: 0 8px 32px rgba(244, 63, 94, 0.25);
     color: #fb7185;
 }
 
-.videofetch-card:hover .supported-platforms span {
+.mediafetch-card:hover .supported-platforms span {
     border-color: rgba(244, 63, 94, 0.2);
     background: rgba(244, 63, 94, 0.05);
     color: #fb7185;
 }
 
-.videofetch-card:hover .card-action-btn {
+.mediafetch-card:hover .card-action-btn {
     background: rgba(244, 63, 94, 0.1);
     border-color: rgba(244, 63, 94, 0.35);
     color: #fb7185;
@@ -245,7 +245,7 @@
 }
 
 /* Active Nav Specifics for Homepage */
-.mediafetch-theme .nav-item.active {
+.omnifetch-theme .nav-item.active {
     background: rgba(99, 102, 241, 0.12);
     border: 1px solid rgba(99, 102, 241, 0.25);
     color: #6366f1;

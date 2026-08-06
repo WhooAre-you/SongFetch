@@ -6,20 +6,20 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="shortcut icon" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
-    <title>VideoFetch - Download YouTube, Instagram & TikTok Videos Without Watermarks</title>
+    <title>MediaFetch - Download Videos & Photos | OmniFetch Suite</title>
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="videofetch.css">
+    <link rel="stylesheet" href="omnifetch.css">
     <link rel="manifest" href="manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="VideoFetch">
+    <meta name="apple-mobile-web-app-title" content="OmniFetch">
     <meta name="theme-color" content="#f43f5e">
 </head>
-<body class="videofetch-theme">
+<body class="omnifetch-theme">
     <div class="background-glow">
         <div class="glow-1"></div>
         <div class="glow-2"></div>
@@ -43,12 +43,12 @@
                 </svg>
                 <span>SongFetch</span>
             </a>
-            <a href="/videofetch.html" class="nav-item active">
+            <a href="/mediafetch.html" class="nav-item active">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polygon points="23 7 16 12 23 17 23 7"></polygon>
                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
                 </svg>
-                <span>VideoFetch</span>
+                <span>MediaFetch</span>
             </a>
             <a href="/moviefetch.html" class="nav-item">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -72,9 +72,9 @@
                     <polygon points="23 7 16 12 23 17 23 7"></polygon>
                     <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
                 </svg>
-                <span>VideoFetch <span class="version">1.0</span></span>
+                <span>MediaFetch <span class="version">1.0</span></span>
             </div>
-            <p class="tagline">Download high-quality videos from YouTube, Instagram, and TikTok without watermarks</p>
+            <p class="tagline">Download high-quality videos and photo slideshows from YouTube, Instagram, and TikTok without watermarks</p>
         </header>
 
         <!-- Main Card -->
@@ -90,7 +90,7 @@
                         <input 
                             type="text" 
                             id="search-input" 
-                            placeholder="Paste link (YouTube, Instagram Reel, TikTok Video)..."
+                            placeholder="Paste link (YouTube video, Instagram Post/Reel, TikTok Post/Slideshow)..."
                             required
                             autocomplete="off"
                         >
@@ -115,6 +115,7 @@
                     <span class="platform youtube"><span class="dot"></span>YouTube</span>
                     <span class="platform instagram"><span class="dot"></span>Instagram</span>
                     <span class="platform tiktok"><span class="dot"></span>TikTok</span>
+                    <span class="platform facebook"><span class="dot"></span>Facebook & Reels</span>
                 </div>
             </section>
 
@@ -124,7 +125,7 @@
                     <div class="double-bounce1"></div>
                     <div class="double-bounce2"></div>
                 </div>
-                <p id="loader-text">Analyzing video link...</p>
+                <p id="loader-text">Analyzing media link...</p>
             </section>
 
             <!-- Result Card -->
@@ -151,7 +152,7 @@
                         </p>
 
                         <!-- Quality Selection Dropdown -->
-                        <div class="quality-selector-container">
+                        <div id="quality-selector-block" class="quality-selector-container">
                             <label for="quality-select" class="selector-label">Select Download Quality</label>
                             <div class="select-wrapper">
                                 <select id="quality-select">
@@ -163,6 +164,21 @@
                             </div>
                         </div>
 
+                        <!-- Photo Selection Panel -->
+                        <div id="photo-selection-container" class="photo-selection-container hidden">
+                            <div class="photo-selection-header">
+                                <span class="selector-label">Select Photos to Download</span>
+                                <label class="select-all-label">
+                                    <input type="checkbox" id="select-all-photos" checked>
+                                    <span class="custom-checkbox"></span>
+                                    <span>Select All</span>
+                                </label>
+                            </div>
+                            <div id="photo-grid" class="photo-grid">
+                                <!-- Loaded dynamically -->
+                            </div>
+                        </div>
+
                         <!-- Download Actions -->
                         <div class="download-container">
                             <button id="download-btn" class="download-btn">
@@ -171,7 +187,7 @@
                                     <polyline points="7 10 12 15 17 10"></polyline>
                                     <line x1="12" y1="15" x2="12" y2="3"></line>
                                 </svg>
-                                <span>Download Video</span>
+                                <span id="download-btn-text">Download Video</span>
                             </button>
                         </div>
                     </div>
@@ -208,6 +224,6 @@
         </footer>
     </div>
     
-    <script src="videofetch.js"></script>
+    <script src="mediafetch.js"></script>
 </body>
 </html>

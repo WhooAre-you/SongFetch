@@ -1,3 +1,10 @@
+const dns = require('dns');
+try {
+  dns.setServers(['8.8.8.8', '1.1.1.1']);
+} catch (e) {
+  console.warn('Warning: Could not set custom DNS:', e.message);
+}
+
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -19,8 +26,8 @@ app.get('/songfetch', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'songfetch.html'));
 });
 
-app.get('/videofetch', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'videofetch.html'));
+app.get('/mediafetch', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'mediafetch.html'));
 });
 
 app.get('/moviefetch', (req, res) => {
@@ -29,14 +36,14 @@ app.get('/moviefetch', (req, res) => {
 
 // Import and use modular API routers
 app.use(require('./routes/songfetch'));
-app.use(require('./routes/videofetch'));
+app.use(require('./routes/mediafetch'));
 app.use(require('./routes/movies'));
 app.use(require('./routes/series').router);
 
 // Start Server & verify binaries on startup
 app.listen(PORT, async () => {
   console.log(`=========================================`);
-  console.log(` MediaFetch Server is running on port ${PORT}`);
+  console.log(` OmniFetch Server is running on port ${PORT}`);
   console.log(` URL: http://localhost:${PORT}`);
   console.log(`=========================================`);
   try {

@@ -1,13 +1,12 @@
-const CACHE_NAME = 'songfetch-v3';
+const CACHE_NAME = 'songfetch-v5';
 const ASSETS = [
   '/',
   '/index.html',
   '/style.css',
   '/app.js',
   '/manifest.json',
-  '/videofetch.html',
-  '/videofetch.css',
-  '/videofetch.js',
+  '/mediafetch.html',
+  '/mediafetch.js',
   '/songfetch.html',
   '/omnifetch.css',
   '/moviefetch.html',
