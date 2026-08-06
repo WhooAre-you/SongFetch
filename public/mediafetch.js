@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (checkedCount === 1) {
                 downloadBtnText.textContent = 'Download Single Photo';
             } else {
-                downloadBtnText.textContent = `Download ${checkedCount} Selected Photos (ZIP)`;
+                downloadBtnText.textContent = `Download ${checkedCount} Selected Photos`;
             }
         } else {
             downloadBtnText.textContent = 'Download Video';
@@ -223,8 +223,17 @@ document.addEventListener('DOMContentLoaded', () => {
                     audioOption.value = 'audio';
                     audioOption.textContent = `Audio Only (MP3)${data.audioSize ? ` - ${data.audioSize}` : ''}`;
                     qualitySelect.appendChild(audioOption);
+                } else if (data.formats && data.formats.length > 0 && data.formats[0].url) {
+                    // Direct link formats (like Facebook Snapsave)
+                    data.formats.forEach(f => {
+                        const option = document.createElement('option');
+                        option.value = 'direct';
+                        option.dataset.url = f.url;
+                        option.textContent = `${f.height}${f.size ? ` - ${f.size}` : ''}`;
+                        qualitySelect.appendChild(option);
+                    });
                 } else {
-                    // TikTok, Instagram, and Facebook only download in Best Quality
+                    // TikTok and Instagram only download in Best Quality
                     const bestOption = document.createElement('option');
                     bestOption.value = 'best';
                     const sizeStr = (data.formats && data.formats[0]) ? data.formats[0].size : data.bestSize;
@@ -246,12 +255,61 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Helper: Trigger browser file download from a proxy blob stream
+    async function downloadFileFromProxy(url, filename, ext, onProgress) {
+        const response = await fetch(`/api/mediafetch/download-direct?url=${encodeURIComponent(url)}&title=${encodeURIComponent(filename)}&ext=${ext}`);
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({}));
+            throw new Error(errData.error || 'Direct proxy download failed.');
+        }
+
+        const contentLength = response.headers.get('content-length');
+        const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+        const reader = response.body.getReader();
+        let loadedBytes = 0;
+        const chunks = [];
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            chunks.push(value);
+            loadedBytes += value.length;
+
+            if (totalBytes > 0 && onProgress) {
+                const percent = Math.round((loadedBytes / totalBytes) * 100);
+                onProgress(percent, loadedBytes, totalBytes);
+            }
+        }
+
+        const mimeMap = {
+            'mp3': 'audio/mpeg',
+            'mp4': 'video/mp4',
+            'jpg': 'image/jpeg',
+            'png': 'image/png',
+            'webp': 'image/webp'
+        };
+
+        const blob = new Blob(chunks, { type: mimeMap[ext] || 'application/octet-stream' });
+        const blobUrl = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `${filename}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+    }
+
     // Download Button Action
     downloadBtn.addEventListener('click', async () => {
         if (!currentMediaData) return;
 
         if (currentMediaData.images && currentMediaData.images.length > 0) {
-            // Photo download branch
+            // Photo download branch (downloading multiple slideshows without ZIP)
             const checkedBoxes = photoGrid.querySelectorAll('.photo-checkbox:checked');
             if (checkedBoxes.length === 0) {
                 alert('Please select at least one photo to download.');
@@ -262,57 +320,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             downloadBtn.disabled = true;
             downloadProgress.classList.remove('hidden');
-            updateProgressUI(0, 'Packaging photos...');
-
-            // Simulated packaging progress
-            let simulatedProgress = 0;
-            const simulatedInterval = setInterval(() => {
-                if (simulatedProgress < 90) {
-                    simulatedProgress += 15;
-                    if (simulatedProgress > 90) simulatedProgress = 90;
-                    updateProgressUI(simulatedProgress, 'Downloading photos and creating ZIP archive...');
-                }
-            }, 300);
 
             try {
-                const response = await fetch('/api/mediafetch/download-photos', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        urls: urls,
-                        title: currentMediaData.title
-                    })
-                });
+                for (let i = 0; i < urls.length; i++) {
+                    const url = urls[i];
+                    const filename = `${currentMediaData.title}_photo_${i + 1}`;
+                    
+                    updateProgressUI(
+                        Math.round((i / urls.length) * 100), 
+                        `Downloading photo ${i + 1} of ${urls.length}: "${filename}"...`
+                    );
 
-                clearInterval(simulatedInterval);
+                    // Download photo using backend proxy
+                    await downloadFileFromProxy(url, filename, 'jpg', (percent) => {
+                        const basePercent = Math.round((i / urls.length) * 100);
+                        const progressInStep = Math.round((percent / 100) * (100 / urls.length));
+                        updateProgressUI(
+                            basePercent + progressInStep, 
+                            `Downloading photo ${i + 1} of ${urls.length}: ${percent}%`
+                        );
+                    });
 
-                if (!response.ok) {
-                    const errData = await response.json().catch(() => ({}));
-                    throw new Error(errData.error || 'Server-side photo processing failed.');
+                    // Add a tiny delay to ensure browser sequential download slot works smoothly
+                    await new Promise(r => setTimeout(r, 400));
                 }
 
-                updateProgressUI(95, 'Transferring ZIP archive to browser...');
-
-                const blob = await response.blob();
-                const blobUrl = URL.createObjectURL(blob);
-                
-                const a = document.createElement('a');
-                a.href = blobUrl;
-
-                const disposition = response.headers.get('content-disposition');
-                let filename = `${currentMediaData.title}_photos.zip`;
-                if (disposition && disposition.includes('filename=')) {
-                    filename = decodeURIComponent(disposition.split('filename=')[1].replace(/['"]/g, ''));
-                }
-                
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                
-                document.body.removeChild(a);
-                URL.revokeObjectURL(blobUrl);
-
-                updateProgressUI(100, 'Photos downloaded successfully!');
+                updateProgressUI(100, 'All photos downloaded successfully!');
 
                 setTimeout(() => {
                     downloadBtn.disabled = false;
@@ -320,18 +353,43 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 3000);
 
             } catch (err) {
-                clearInterval(simulatedInterval);
                 console.error('Photo download failed:', err);
                 showError(`Photo download failed: ${err.message}`);
             }
 
         } else {
             // Video download branch
+            const selectedOption = qualitySelect.options[qualitySelect.selectedIndex];
             const quality = qualitySelect.value;
             const isAudio = quality === 'audio';
 
             downloadBtn.disabled = true;
             downloadProgress.classList.remove('hidden');
+
+            // If it's a direct link option (e.g. Snapsave Facebook direct CDN links)
+            if (quality === 'direct') {
+                const directUrl = selectedOption.dataset.url;
+                updateProgressUI(0, 'Connecting to CDN stream...');
+                try {
+                    await downloadFileFromProxy(directUrl, currentMediaData.title, 'mp4', (percent, loadedBytes, totalBytes) => {
+                        const loadedMB = (loadedBytes / (1024 * 1024)).toFixed(1);
+                        const totalMB = (totalBytes / (1024 * 1024)).toFixed(1);
+                        updateProgressUI(percent, `Downloading video: ${loadedMB}MB of ${totalMB}MB (${percent}%)`);
+                    });
+
+                    updateProgressUI(100, 'Download complete!');
+                    setTimeout(() => {
+                        downloadBtn.disabled = false;
+                        downloadProgress.classList.add('hidden');
+                    }, 3000);
+                } catch (error) {
+                    console.error('Direct download failed:', error);
+                    showError(`Download failed: ${error.message}`);
+                }
+                return;
+            }
+
+            // Normal backend download logic (via yt-dlp)
             updateProgressUI(0, 'Initializing downloader...');
 
             // Smooth simulated progress bar stages (0% - 90%)

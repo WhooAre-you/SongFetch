@@ -2,26 +2,58 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
-const AdmZip = require('adm-zip');
+const cheerio = require('cheerio');
+const qs = require('qs');
 const { execFile } = require('child_process');
 const ffmpegPath = require('ffmpeg-static');
 const { ensureYtDlp, tempDir, formatDuration, formatSize } = require('../utils/ytDlp');
 
 const router = express.Router();
 
-// Helper: Download a file to a buffer
-async function downloadToBuffer(url) {
+// Helper: Secure in-process Snapsave script deobfuscator
+function deobfuscateSnapsave(packedScript) {
   try {
-    const response = await axios.get(url, {
-      responseType: 'arraybuffer',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-      },
-      timeout: 15000
-    });
-    return response.data;
+    const match = packedScript.match(/\}\s*\(\s*["']([^"']+)["']\s*,\s*(\d+)\s*,\s*["']([^"']+)["']\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
+    if (!match) return null;
+    
+    const [_, h, uStr, n, tStr, eStr, rStr] = match;
+    const u = parseInt(uStr);
+    const t = parseInt(tStr);
+    const e = parseInt(eStr);
+    const r = parseInt(rStr);
+    
+    const _0xc1e = ["", "split", "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/", "slice", "indexOf", "", "", ".", "pow", "reduce", "reverse", "0"];
+    
+    function _0xe4c(d, eVal, fVal) {
+      var g = _0xc1e[2][_0xc1e[1]](_0xc1e[0]);
+      var hVal = g[_0xc1e[3]](0, eVal);
+      var iVal = g[_0xc1e[3]](0, fVal);
+      var jVal = d[_0xc1e[1]](_0xc1e[0])[_0xc1e[10]]()[_0xc1e[9]](function(a, b, c) {
+        if (hVal[_0xc1e[4]](b) !== -1) return a += hVal[_0xc1e[4]](b) * (Math[_0xc1e[8]](eVal, c));
+      }, 0);
+      var kVal = _0xc1e[0];
+      while (jVal > 0) {
+        kVal = iVal[jVal % fVal] + kVal;
+        jVal = (jVal - (jVal % fVal)) / fVal;
+      }
+      return kVal || _0xc1e[11];
+    }
+    
+    let decoded = "";
+    for (let i = 0, len = h.length; i < len; i++) {
+      let s = "";
+      while (h[i] !== n[e]) {
+        s += h[i];
+        i++;
+      }
+      for (let j = 0; j < n.length; j++) {
+        s = s.replace(new RegExp(n[j], "g"), j);
+      }
+      decoded += String.fromCharCode(_0xe4c(s, e, 10) - t);
+    }
+    return decodeURIComponent(escape(decoded));
   } catch (err) {
-    console.error(`Failed to download image from ${url}:`, err.message);
+    console.error('deobfuscateSnapsave error:', err.message);
     return null;
   }
 }
@@ -46,6 +78,61 @@ router.post('/api/mediafetch/info', async (req, res) => {
   }
 
   try {
+    // If it is Facebook, try the Snapsave scraper first (as it gets HD/SD direct links)
+    if (platform === 'facebook') {
+      try {
+        console.log('Attempting Snapsave extraction for Facebook video:', url);
+        const snapsaveRes = await axios.post('https://snapsave.app/action.php', qs.stringify({ url }), {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Referer': 'https://snapsave.app/',
+            'Origin': 'https://snapsave.app'
+          },
+          timeout: 10000
+        });
+
+        const decodedHtml = deobfuscateSnapsave(snapsaveRes.data);
+        if (decodedHtml) {
+          const $fb = cheerio.load(decodedHtml);
+          const formats = [];
+          
+          $fb('a').each((i, el) => {
+            const href = $fb(el).attr('href');
+            if (href && (href.startsWith('http') || href.includes('video'))) {
+              const text = $fb(el).text().trim() || 'Download';
+              if (href.includes('download-private') || (href.includes('facebook.com') && !href.includes('video'))) {
+                return;
+              }
+              const cleanUrl = href.replace(/\\/g, '');
+              const qualityText = text.replace(/Download/i, '').trim() || 'Best Quality';
+              formats.push({
+                height: qualityText,
+                size: 'Direct Link',
+                url: cleanUrl
+              });
+            }
+          });
+
+          if (formats.length > 0) {
+            console.log(`Successfully extracted ${formats.length} Facebook formats from Snapsave.`);
+            return res.json({
+              title: `Facebook Video (${new Date().toLocaleDateString()})`,
+              thumbnail: '/favicon.svg',
+              duration: 'Unknown',
+              uploader: 'Facebook Video',
+              platform: 'facebook',
+              formats: formats,
+              audioSize: 'Unknown size',
+              bestSize: 'Unknown size'
+            });
+          }
+        }
+      } catch (err) {
+        console.error('Snapsave extraction failed:', err.message);
+      }
+    }
+
     const ytDlpBinary = await ensureYtDlp();
     const args = [
       '--js-runtimes', 'node',
@@ -59,7 +146,6 @@ router.post('/api/mediafetch/info', async (req, res) => {
     console.log(`Fetching media metadata using yt-dlp for: ${url}`);
     
     execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, async (error, stdout, stderr) => {
-      // Parse images if available, or try falling back
       let parsedData = null;
       let hasError = false;
 
@@ -84,7 +170,6 @@ router.post('/api/mediafetch/info', async (req, res) => {
           if (platform === 'tiktok') {
             try {
               console.log('Attempting TikWM fallback for TikTok slideshow/video...');
-              const qs = require('qs');
               const tikwmRes = await axios.post('https://www.tikwm.com/api/', qs.stringify({ url }), {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 timeout: 5000
@@ -336,66 +421,38 @@ router.post('/api/mediafetch/download', async (req, res) => {
   }
 });
 
-// Route: Download Selected Photos (ZIP or Single)
-router.post('/api/mediafetch/download-photos', async (req, res) => {
-  const { urls, title } = req.body;
-  if (!urls || !Array.isArray(urls) || urls.length === 0) {
-    return res.status(400).json({ error: 'At least one photo URL is required' });
+// Route: Proxy download for direct CDN URLs (fixes CORS and filenames)
+router.get('/api/mediafetch/download-direct', async (req, res) => {
+  const { url, title, ext } = req.query;
+  if (!url) {
+    return res.status(400).json({ error: 'URL is required' });
   }
 
-  const cleanTitle = (title || 'media_photos').replace(/[\\/:*?"<>|]/g, '_');
+  const cleanTitle = (title || 'media').replace(/[\\/:*?"<>|]/g, '_');
+  const fileExt = ext || 'mp4';
 
   try {
-    if (urls.length === 1) {
-      // Download single image and stream directly
-      const url = urls[0];
-      console.log(`Downloading single photo: ${url}`);
-      
-      const response = await axios.get(url, {
-        responseType: 'stream',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-        },
-        timeout: 15000
-      });
+    console.log(`Proxy downloading direct URL: ${url}`);
+    const response = await axios.get(url, {
+      responseType: 'stream',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      },
+      timeout: 30000
+    });
 
-      // Try to determine content type or default to image/jpeg
-      const contentType = response.headers['content-type'] || 'image/jpeg';
-      let extension = 'jpg';
-      if (contentType.includes('png')) extension = 'png';
-      else if (contentType.includes('webp')) extension = 'webp';
-
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(cleanTitle)}.${extension}"`);
-      res.setHeader('Content-Type', contentType);
-      response.data.pipe(res);
-    } else {
-      // Download multiple images concurrently and package as ZIP
-      console.log(`Downloading ${urls.length} photos and packaging as ZIP...`);
-      
-      const zip = new AdmZip();
-      const downloadPromises = urls.map(async (url, index) => {
-        const buffer = await downloadToBuffer(url);
-        if (buffer) {
-          // Attempt to extract extension from URL or content headers
-          let ext = 'jpg';
-          if (url.includes('.png')) ext = 'png';
-          else if (url.includes('.webp')) ext = 'webp';
-          
-          zip.addFile(`photo_${index + 1}.${ext}`, buffer);
-        }
-      });
-
-      await Promise.all(downloadPromises);
-
-      const zipBuffer = zip.toBuffer();
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(cleanTitle)}_photos.zip"`);
-      res.setHeader('Content-Type', 'application/zip');
-      res.setHeader('Content-Length', zipBuffer.length);
-      res.end(zipBuffer);
+    const contentType = response.headers['content-type'] || (fileExt === 'mp3' ? 'audio/mpeg' : (fileExt === 'jpg' ? 'image/jpeg' : 'video/mp4'));
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(cleanTitle)}.${fileExt}"`);
+    res.setHeader('Content-Type', contentType);
+    
+    if (response.headers['content-length']) {
+      res.setHeader('Content-Length', response.headers['content-length']);
     }
+
+    response.data.pipe(res);
   } catch (err) {
-    console.error('Photo download API error:', err.message);
-    res.status(500).json({ error: `Photo download failed: ${err.message}` });
+    console.error('Proxy download route failed:', err.message);
+    res.status(500).json({ error: `Proxy download failed: ${err.message}` });
   }
 });
 
