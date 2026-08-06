@@ -22,6 +22,8 @@ router.post('/api/videofetch/info', async (req, res) => {
     platform = 'instagram';
   } else if (urlLower.includes('tiktok.com')) {
     platform = 'tiktok';
+  } else if (urlLower.includes('facebook.com') || urlLower.includes('fb.watch')) {
+    platform = 'facebook';
   }
 
   try {
@@ -40,7 +42,7 @@ router.post('/api/videofetch/info', async (req, res) => {
     execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
       if (error) {
         console.error('yt-dlp metadata extraction failed:', error.message);
-        if (platform === 'tiktok' || platform === 'instagram') {
+        if (platform === 'tiktok' || platform === 'instagram' || platform === 'facebook') {
           console.log(`Using fallback metadata for platform: ${platform}`);
           return res.json({
             title: `Video from ${platform.charAt(0).toUpperCase() + platform.slice(1)}`,
@@ -154,6 +156,8 @@ router.post('/api/videofetch/download', async (req, res) => {
     platform = 'instagram';
   } else if (urlLower.includes('tiktok.com')) {
     platform = 'tiktok';
+  } else if (urlLower.includes('facebook.com') || urlLower.includes('fb.watch')) {
+    platform = 'facebook';
   }
 
   const tempId = `video_${Date.now()}_${Math.floor(Math.random() * 10000)}`;

@@ -6,20 +6,21 @@
     <link rel="icon" type="image/svg+xml" href="favicon.svg">
     <link rel="shortcut icon" href="favicon.svg">
     <link rel="apple-touch-icon" href="favicon.svg">
-    <title>OmniFetch - High-Quality Music & Video Downloader Suite</title>
+    <title>MediaFetch - High-Quality Music & Video Downloader Suite</title>
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="omnifetch.css">
+    <link rel="stylesheet" href="mediafetch.css">
     <link rel="manifest" href="manifest.json">
+    <script src="pwa.js" defer></script>
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="OmniFetch">
+    <meta name="apple-mobile-web-app-title" content="MediaFetch">
     <meta name="theme-color" content="#6366f1">
 </head>
-<body class="omnifetch-theme">
+<body class="mediafetch-theme">
     <div class="background-glow">
         <div class="glow-1"></div>
         <div class="glow-2"></div>
@@ -71,9 +72,17 @@
                 <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
                 </svg>
-                <span>OmniFetch <span class="version">1.0</span></span>
+                <span>MediaFetch <span class="version">1.0</span></span>
             </div>
             <p class="tagline">The ultimate unified downloader suite for music and video files</p>
+            <button id="pwa-install-btn" class="pwa-install-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 17V3"></path>
+                    <path d="M7 8l5-5 5 5"></path>
+                    <path d="M20 21H4"></path>
+                </svg>
+                <span>Add OmniFetch to Home Screen</span>
+            </button>
         </header>
 
         <!-- Gateway Dashboard -->
@@ -164,6 +173,22 @@
         <footer class="footer">
             <p>Made by WhooAre_you</p>
         </footer>
+    </div>
+
+    <!-- iOS Install Banner (shown on Safari only) -->
+    <div id="ios-install-banner" class="ios-install-banner hidden">
+        <div class="ios-banner-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M9 18V5l12-2v13"></path>
+                <circle cx="6" cy="18" r="3"></circle>
+                <circle cx="18" cy="16" r="3"></circle>
+            </svg>
+        </div>
+        <div class="ios-banner-text">
+            <strong>Add OmniFetch to Home Screen</strong>
+            <span>Tap <strong>Share</strong> then <strong>"Add to Home Screen"</strong> to install</span>
+        </div>
+        <button class="ios-banner-close" id="ios-banner-close" aria-label="Dismiss">✕</button>
     </div>
 </body>
 </html>

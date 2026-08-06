@@ -1,7 +1,7 @@
 /* ==========================================
-   OMNIFETCH THEME VARIABLES
+   MEDIAFETCH THEME VARIABLES
    ========================================== */
-.omnifetch-theme {
+.mediafetch-theme {
     --color-primary: #6366f1;
     --color-primary-glow: rgba(99, 102, 241, 0.25);
     --color-gradient: linear-gradient(135deg, #6366f1 0%, #a855f7 50%, #f43f5e 100%);
@@ -9,15 +9,15 @@
     --theme-glow-2: radial-gradient(circle, rgba(244, 63, 94, 0.12) 0%, rgba(0, 0, 0, 0) 70%);
 }
 
-.omnifetch-theme .glow-1 {
+.mediafetch-theme .glow-1 {
     background: var(--theme-glow-1);
 }
 
-.omnifetch-theme .glow-2 {
+.mediafetch-theme .glow-2 {
     background: var(--theme-glow-2);
 }
 
-.omnifetch-theme .logo svg {
+.mediafetch-theme .logo svg {
     stroke: #6366f1;
     filter: drop-shadow(0px 4px 12px rgba(99, 102, 241, 0.4));
 }
@@ -245,7 +245,7 @@
 }
 
 /* Active Nav Specifics for Homepage */
-.omnifetch-theme .nav-item.active {
+.mediafetch-theme .nav-item.active {
     background: rgba(99, 102, 241, 0.12);
     border: 1px solid rgba(99, 102, 241, 0.25);
     color: #6366f1;

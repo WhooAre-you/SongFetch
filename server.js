@@ -36,7 +36,7 @@ app.use(require('./routes/series').router);
 // Start Server & verify binaries on startup
 app.listen(PORT, async () => {
   console.log(`=========================================`);
-  console.log(` SongFetch Server is running on port ${PORT}`);
+  console.log(` MediaFetch Server is running on port ${PORT}`);
   console.log(` URL: http://localhost:${PORT}`);
   console.log(`=========================================`);
   try {
