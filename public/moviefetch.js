@@ -30,7 +30,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Download Configuration Elements
     const qualitiesList = document.getElementById('qualities-list');
-    const subtitlesSelect = document.getElementById('subtitles-select');
     const summaryTitle = document.getElementById('summary-title');
     const summarySize = document.getElementById('summary-size');
     const downloadNowBtn = document.getElementById('download-now-btn');
@@ -466,7 +465,7 @@ document.addEventListener('DOMContentLoaded', () => {
             movieGenre.textContent = classifyItemType(item) === 'movie' ? 'Movie' : 'TV Show';
             movieTypeBadge.textContent = classifyItemType(item) === 'series' ? 'TV SERIES' : 'MOVIE';
             movieRating.textContent = '★ 8.2';
-            moviePlot.textContent = `High-speed direct CDN streams served via ${sourceName}. Select your preferred resolution and download quality below to fetch the video file. Optional subtitles can be multiplexed directly into the final container.`;
+            moviePlot.textContent = `High-speed direct CDN streams served via ${sourceName}. Select your preferred resolution and download quality below to fetch the video file.`;
 
             // Search metadata helpers to fill in premium English plot/genre details
             if (classifyItemType(item) === 'series') {
