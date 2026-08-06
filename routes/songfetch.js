@@ -403,8 +403,9 @@ router.post('/api/search', async (req, res) => {
               '-J',
               `ytsearch1:${queryOrUrl}`
             ];
+            const ytDlpBinary = await ensureYtDlp();
             const jsonStr = await new Promise((resolve, reject) => {
-              execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+              execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
                 if (error) reject(new Error(stderr || error.message));
                 else resolve(stdout);
               });
@@ -447,8 +448,9 @@ router.post('/api/search', async (req, res) => {
               '-J',
               `scsearch1:${queryOrUrl}`
             ];
+            const ytDlpBinary = await ensureYtDlp();
             const jsonStr = await new Promise((resolve, reject) => {
-              execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+              execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
                 if (error) reject(new Error(stderr || error.message));
                 else resolve(stdout);
               });
@@ -499,8 +501,9 @@ router.post('/api/search', async (req, res) => {
               '-J',
               `ytsearch8:${queryOrUrl}`
             ];
+            const ytDlpBinary = await ensureYtDlp();
             const jsonStr = await new Promise((resolve, reject) => {
-              execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+              execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
                 if (error) reject(new Error(stderr || error.message));
                 else resolve(stdout);
               });
@@ -520,8 +523,9 @@ router.post('/api/search', async (req, res) => {
               '-J',
               `scsearch8:${queryOrUrl}`
             ];
+            const ytDlpBinary = await ensureYtDlp();
             const jsonStr = await new Promise((resolve, reject) => {
-              execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+              execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
                 if (error) reject(new Error(stderr || error.message));
                 else resolve(stdout);
               });

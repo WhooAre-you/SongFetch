@@ -93,6 +93,21 @@ function deobfuscateSnapsave(packedScript) {
   }
 }
 
+// Helper: Extract HTML string from packed JS script template (e.g. snapsave innerHTML)
+function extractHtmlFromJs(str) {
+  if (!str) return '';
+  const match = str.match(/innerHTML\s*=\s*"(.+?)"\s*;/);
+  if (match) {
+    return match[1]
+      .replace(/\\"/g, '"')
+      .replace(/\\'/g, "'")
+      .replace(/\\\\\//g, '/')
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t');
+  }
+  return str;
+}
+
 // Route: Fetch Media Info (metadata + available resolutions or photos)
 router.post('/api/mediafetch/info', async (req, res) => {
   const { url } = req.body;
@@ -129,7 +144,8 @@ router.post('/api/mediafetch/info', async (req, res) => {
 
         const decodedHtml = deobfuscateSnapsave(snapsaveRes.data);
         if (decodedHtml) {
-          const $fb = cheerio.load(decodedHtml);
+          const cleanHtml = extractHtmlFromJs(decodedHtml);
+          const $fb = cheerio.load(cleanHtml);
           const formats = [];
           
           $fb('a').each((i, el) => {
@@ -258,6 +274,145 @@ router.post('/api/mediafetch/info', async (req, res) => {
             }
           }
 
+          if (platform === 'instagram') {
+            // 1. Try Snapinsta
+            try {
+              console.log('Attempting Snapinsta fallback for Instagram slideshow:', url);
+              const snapRes = await axios.post('https://snapinsta.app/action.php', qs.stringify({ url, action: 'post' }), {
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                  'Referer': 'https://snapinsta.app/',
+                  'Origin': 'https://snapinsta.app'
+                },
+                timeout: 10000
+              });
+
+              const decoded = deobfuscateSnapsave(snapRes.data);
+              if (decoded) {
+                const cleanHtml = extractHtmlFromJs(decoded);
+                const $ = cheerio.load(cleanHtml);
+                const images = [];
+                const formats = [];
+                let isVideo = false;
+
+                $('a').each((i, el) => {
+                  const href = $(el).attr('href');
+                  if (href && href.startsWith('http')) {
+                    const text = $(el).text().toLowerCase();
+                    const cleanUrl = href.replace(/\\/g, '');
+                    if (cleanUrl.includes('.mp4') || text.includes('video')) {
+                      isVideo = true;
+                      if (!formats.includes(cleanUrl)) formats.push(cleanUrl);
+                    } else if (cleanUrl.includes('rapidcdn.app') || cleanUrl.includes('scontent') || cleanUrl.includes('cdninstagram')) {
+                      if (!images.includes(cleanUrl)) images.push(cleanUrl);
+                    }
+                  }
+                });
+
+                if (isVideo && formats.length > 0) {
+                  console.log('Snapinsta extracted video file successfully.');
+                  const sizeBytes = await getRemoteFileSize(formats[0]);
+                  return res.json({
+                    title: `Instagram Video (${new Date().toLocaleDateString()})`,
+                    thumbnail: images[0] || '/favicon.svg',
+                    duration: 'Unknown',
+                    uploader: 'Instagram Creator',
+                    platform: 'instagram',
+                    formats: [{ height: 'best', size: sizeBytes ? formatSize(sizeBytes) : 'Unknown size', url: formats[0] }],
+                    audioSize: 'Unknown size',
+                    bestSize: sizeBytes ? formatSize(sizeBytes) : 'Unknown size'
+                  });
+                } else if (images.length > 0) {
+                  console.log(`Successfully extracted ${images.length} Instagram slideshow images from Snapinsta.`);
+                  const firstImgSize = await getRemoteFileSize(images[0]);
+                  return res.json({
+                    title: `Instagram Post (${new Date().toLocaleDateString()})`,
+                    thumbnail: images[0],
+                    duration: 'Slideshow',
+                    uploader: 'Instagram Creator',
+                    platform: 'instagram',
+                    formats: [],
+                    images: images.map((img, idx) => ({ index: idx, url: img })),
+                    audioSize: 'Unknown size',
+                    bestSize: firstImgSize ? `${formatSize(firstImgSize)} per photo` : 'Unknown size'
+                  });
+                }
+              }
+            } catch (err) {
+              console.warn('Snapinsta Instagram fallback failed:', err.message);
+            }
+
+            // 2. Try Snapsave
+            try {
+              console.log('Attempting Snapsave fallback for Instagram slideshow:', url);
+              const snapsaveRes = await axios.post('https://snapsave.app/action.php', qs.stringify({ url }), {
+                headers: {
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                  'Referer': 'https://snapsave.app/',
+                  'Origin': 'https://snapsave.app'
+                },
+                timeout: 10000
+              });
+
+              const decoded = deobfuscateSnapsave(snapsaveRes.data);
+              if (decoded) {
+                const cleanHtml = extractHtmlFromJs(decoded);
+                const $ = cheerio.load(cleanHtml);
+                const images = [];
+                const formats = [];
+                let isVideo = false;
+
+                $('a').each((i, el) => {
+                  const href = $(el).attr('href');
+                  if (href && href.startsWith('http')) {
+                    const text = $(el).text().toLowerCase();
+                    const cleanUrl = href.replace(/\\/g, '');
+                    if (cleanUrl.includes('.mp4') || text.includes('video')) {
+                      isVideo = true;
+                      if (!formats.includes(cleanUrl)) formats.push(cleanUrl);
+                    } else if (cleanUrl.includes('rapidcdn.app') || cleanUrl.includes('scontent') || cleanUrl.includes('cdninstagram')) {
+                      if (!images.includes(cleanUrl)) images.push(cleanUrl);
+                    }
+                  }
+                });
+
+                if (isVideo && formats.length > 0) {
+                  console.log('Snapsave extracted video file successfully.');
+                  const sizeBytes = await getRemoteFileSize(formats[0]);
+                  return res.json({
+                    title: `Instagram Video (${new Date().toLocaleDateString()})`,
+                    thumbnail: images[0] || '/favicon.svg',
+                    duration: 'Unknown',
+                    uploader: 'Instagram Creator',
+                    platform: 'instagram',
+                    formats: [{ height: 'best', size: sizeBytes ? formatSize(sizeBytes) : 'Unknown size', url: formats[0] }],
+                    audioSize: 'Unknown size',
+                    bestSize: sizeBytes ? formatSize(sizeBytes) : 'Unknown size'
+                  });
+                } else if (images.length > 0) {
+                  console.log(`Successfully extracted ${images.length} Instagram slideshow images from Snapsave.`);
+                  const firstImgSize = await getRemoteFileSize(images[0]);
+                  return res.json({
+                    title: `Instagram Post (${new Date().toLocaleDateString()})`,
+                    thumbnail: images[0],
+                    duration: 'Slideshow',
+                    uploader: 'Instagram Creator',
+                    platform: 'instagram',
+                    formats: [],
+                    images: images.map((img, idx) => ({ index: idx, url: img })),
+                    audioSize: 'Unknown size',
+                    bestSize: firstImgSize ? `${formatSize(firstImgSize)} per photo` : 'Unknown size'
+                  });
+                }
+              }
+            } catch (err) {
+              console.warn('Snapsave Instagram fallback failed:', err.message);
+            }
+          }
+
+          // 3. Raw HTML Scraper Fallback (for Facebook slideshows or Instagram if snapsave/snapinsta failed)
           if (platform === 'instagram' || platform === 'facebook') {
             try {
               console.log(`Attempting HTML metadata scraping fallback for ${platform}: ${url}`);
@@ -290,9 +445,8 @@ router.post('/api/mediafetch/info', async (req, res) => {
               } else if (ogImage) {
                 // Photo/Slideshow fallback
                 const images = [];
-                images.push(ogImage);
                 
-                // Scan display_url values in scripts
+                // Scan display_url values in scripts (avoiding low-res ogImage if we find original ones)
                 const regex = /"display_url"\s*:\s*"([^"]+)"/g;
                 let match;
                 while ((match = regex.exec(html)) !== null) {
@@ -315,6 +469,11 @@ router.post('/api/mediafetch/info', async (req, res) => {
                       }
                     } catch(e) {}
                   }
+                }
+
+                // If no high-res display URLs matched, fallback to the ogImage thumbnail
+                if (images.length === 0 && ogImage) {
+                  images.push(ogImage);
                 }
 
                 const firstImgSize = await getRemoteFileSize(images[0]);
