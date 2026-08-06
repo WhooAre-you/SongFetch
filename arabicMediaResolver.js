@@ -99,7 +99,7 @@ function extractCoreQuery(q) {
 async function fetchHtml(url, mirrors = []) {
   const fetchWithTimeout = async (targetUrl) => {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 3500);
+    const timer = setTimeout(() => controller.abort(), 7000);
     try {
       const res = await fetch(targetUrl, {
         headers: BROWSER_HEADERS,
@@ -389,26 +389,40 @@ function groupSeriesResults(results) {
 
     const titleNorm = normalizeArabic(item.title);
     let seasonNum = 1;
-    if (titleNorm.includes('ريفو 2') || titleNorm.includes('الموسم الثاني') || titleNorm.includes('موسم 2') || titleNorm.includes(' 2 ')) {
+    const seasonMatch = titleNorm.match(/(?:الموسم|موسم|season)\s*(\d+)/i) || titleNorm.match(/\bموسم\s*(\d+)/i);
+    if (seasonMatch) {
+      seasonNum = parseInt(seasonMatch[1], 10) || 1;
+    } else if (titleNorm.includes('الموسم الثاني') || titleNorm.includes('موسم 2') || titleNorm.includes(' 2 ')) {
       seasonNum = 2;
+    } else if (titleNorm.includes('الموسم الثالث') || titleNorm.includes('موسم 3')) {
+      seasonNum = 3;
+    } else if (titleNorm.includes('الموسم الرابع') || titleNorm.includes('موسم 4')) {
+      seasonNum = 4;
     }
 
-    let coreName = 'ريفو';
-    if (!titleNorm.includes('ريفو') && !titleNorm.includes('ريڤو')) {
-      coreName = extractCoreQuery(item.title)
+    let coreName = extractCoreQuery(item.title)
+      .replace(/الحلقة\s*\d+|حلقة\s*\d+|episode\s*\d+|ep\s*\d+|\d+$/gi, '')
+      .replace(/الموسم\s*\d+|موسم\s*\d+|season\s*\d+/gi, '')
+      .replace(/الموسم\s*(?:الاول|الأول|الثاني|الثالث|الرابع|الخامس)/gi, '')
+      .trim();
+
+    if (!coreName || coreName.length < 2) {
+      coreName = item.title
         .replace(/الحلقة\s*\d+|حلقة\s*\d+|episode\s*\d+|ep\s*\d+|\d+$/gi, '')
-        .replace(/الموسم\s*\d+|موسم\s*\d+/gi, '')
+        .replace(/الموسم\s*\d+|موسم\s*\d+|season\s*\d+/gi, '')
         .trim();
     }
-
-    if (!coreName || coreName.length < 2) coreName = item.title;
+    if (!coreName || coreName.length < 2) {
+      coreName = item.title;
+    }
 
     const groupKey = `${coreName}_season_${seasonNum}`;
 
     if (!seriesGroups.has(groupKey)) {
+      const seasonLabel = seasonNum > 1 ? `الموسم ${seasonNum}` : `الموسم الأول`;
       seriesGroups.set(groupKey, {
         id: item.id,
-        title: seasonNum === 2 ? `مسلسل ${coreName} - الموسم الثاني` : `مسلسل ${coreName} - الموسم الأول`,
+        title: `مسلسل ${coreName} - ${seasonLabel}`,
         poster: item.poster || 'https://a.prstej.net/uploads/articles/dc077189.jpg',
         source: item.source,
         sourceName: item.sourceName,

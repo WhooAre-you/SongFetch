@@ -1097,9 +1097,17 @@ app.get('/api/movies/stream', async (req, res) => {
     actualVideoUrl = await arabicResolver.resolveDirectHosterMediaUrl(actualVideoUrl);
     console.log(`[Server] Stream resolved direct media URL: ${actualVideoUrl}`);
 
+    let hosterOrigin = 'https://google.com';
+    try {
+      const u = new URL(actualVideoUrl);
+      hosterOrigin = `${u.protocol}//${u.hostname}`;
+    } catch (e) {}
+
     const checkRes = await fetch(actualVideoUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Referer': hosterOrigin,
+        'Accept': '*/*'
       }
     });
 
@@ -1120,7 +1128,9 @@ app.get('/api/movies/stream', async (req, res) => {
       method: 'GET',
       responseType: 'stream',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Referer': hosterOrigin,
+        'Accept': '*/*'
       }
     });
 

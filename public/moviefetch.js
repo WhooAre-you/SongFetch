@@ -81,62 +81,46 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper: Clean and simplify titles to English Name + Date
     function cleanTitle(rawTitle) {
-        // Extract year
+        if (!rawTitle) return '';
         let year = '';
         const yearMatch = rawTitle.match(/\b(19\d\d|20\d\d)\b/);
-        if (yearMatch) {
-            year = yearMatch[1];
-        }
+        if (yearMatch) year = yearMatch[1];
 
-        // Strip common Arabic description/noise phrases before removing Arabic chars
+        // Clean out noise words
         let preClean = rawTitle
-            .replace(/مشاهدة وتحميل|مشاهدة|وتحميل|تحميل|مترجم|كامل|اون لاين|بجودة ممتازة|بجودة عالية|بجودة|ممتازة|عالية|مباشر|ممتعة|بدون إعلانات|إعلانات|أعجبني/g, '')
-            .replace(/يجمع بين.*$/g, '')  // Cut off description sentences
-            .replace(/على\s+\S+\s+سيما.*$/g, '')  // Cut off "على ماي سيما..."
+            .replace(/مشاهدة وتحميل|مشاهدة|وتحميل|تحميل|مترجم|كامل|اون لاين|اونلاين|بجودة ممتازة|بجودة عالية|بجودة|ممتازة|عالية|مباشر|ممتعة|بدون إعلانات|إعلانات|أعجبني/g, '')
+            .replace(/على\s+\S+\s+سيما.*$/g, '')
             .replace(/على موقع.*$/g, '')
+            .replace(/يجمع بين.*$/g, '')
             .trim();
 
-        // Remove Arabic characters
-        let titleClean = preClean.replace(/[\u0600-\u06FF]/g, ' ');
+        // If the title is Arabic, clean noise while preserving Arabic letters
+        const hasArabic = /[\u0600-\u06FF]/.test(preClean);
+        let titleClean = preClean;
 
-        // Remove common movie metadata noise
-        const keywordsToRemove = [
-            'watch', 'download', 'full', 'hd', 'bluray', 'web-dl', '1080p', '720p', '480p', 
-            'mkv', 'mp4', 'avi', 'yify', 'yts', 'quality', 'resolution', 'server', 'direct',
-            'season', 'episode', 'halkat', 'halqa', 'mutarjam', 'arabic', 'english', 'complete',
-            'series', 'movie', 'film', 'show', 'episodes', 'seasons', 'translated'
-        ];
-        
-        keywordsToRemove.forEach(kw => {
-            const regex = new RegExp(`\\b${kw}\\b`, 'gi');
-            titleClean = titleClean.replace(regex, ' ');
-        });
-
-        // Remove brackets, parentheses, colons, hyphens, and isolated years
-        titleClean = titleClean.replace(/[()\-:\[\]]/g, ' ')
-                               .replace(/\b\d{4}\b/g, ' ')
-                               .replace(/\s+/g, ' ')
-                               .trim();
-
-        // Fallback: If no English words remain, try to extract name from Arabic title
-        if (!titleClean || titleClean.length < 3) {
-            // Try to extract just the core Arabic movie name (before any description)
-            let arabicClean = rawTitle.replace(/مشاهدة|تحميل|كامل|مترجم|اون لاين|بجودة|عالية|فيلم|مسلسل|حلقة|موسم|على|علي|موقع|وي سيما|ماي سيما|أعجبني|ممتازة|مباشر|ممتعة|بدون|إعلانات|يجمع|بين|الكوميديا|الدراما|الاكشن|و\b/g, '')
-                                      .replace(/[()\-:\[\]]/g, ' ')
-                                      .replace(/\b\d{4}\b/g, ' ')
-                                      .replace(/\s+/g, ' ')
-                                      .trim();
-            // If still too long, take just the first few words
-            if (arabicClean.length > 50) {
-                arabicClean = arabicClean.split(/\s+/).slice(0, 5).join(' ');
-            }
-            titleClean = arabicClean;
+        if (hasArabic) {
+            titleClean = titleClean
+                .replace(/فيلم|مسلسل|حلقة|موسم/g, '')
+                .replace(/[()\-:\[\]]/g, ' ')
+                .replace(/\b\d{4}\b/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim();
+        } else {
+            // Remove common movie metadata noise for English titles
+            const keywordsToRemove = [
+                'watch', 'download', 'full', 'hd', 'bluray', 'web-dl', '1080p', '720p', '480p', 
+                'mkv', 'mp4', 'avi', 'yify', 'yts', 'quality', 'resolution', 'server', 'direct',
+                'season', 'episode', 'complete', 'series', 'movie', 'film'
+            ];
+            keywordsToRemove.forEach(kw => {
+                const regex = new RegExp(`\\b${kw}\\b`, 'gi');
+                titleClean = titleClean.replace(regex, ' ');
+            });
+            titleClean = titleClean.replace(/[()\-:\[\]]/g, ' ').replace(/\b\d{4}\b/g, ' ').replace(/\s+/g, ' ').trim();
         }
 
-        // Safety cap: if the title is still unreasonably long, truncate
-        if (titleClean.length > 60) {
-            titleClean = titleClean.substring(0, 60).trim();
-        }
+        if (!titleClean || titleClean.length < 2) titleClean = rawTitle;
+        if (titleClean.length > 60) titleClean = titleClean.substring(0, 60).trim();
 
         if (year && !titleClean.includes(year)) {
             return `${titleClean} (${year})`;
@@ -781,14 +765,23 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = streamEndpoint;
     });
 
-    // Wire up stream modal close button
+    // Wire up stream modal buttons
     const streamModalClose = document.getElementById('stream-modal-close');
+    const streamModalExternal = document.getElementById('stream-modal-external');
     if (streamModalClose) {
         streamModalClose.addEventListener('click', () => {
             const modal = document.getElementById('stream-modal');
             const iframe = document.getElementById('stream-iframe');
             if (iframe) iframe.src = '';
             if (modal) modal.style.display = 'none';
+        });
+    }
+    if (streamModalExternal) {
+        streamModalExternal.addEventListener('click', () => {
+            const iframe = document.getElementById('stream-iframe');
+            if (iframe && iframe.src) {
+                window.open(iframe.src, '_blank');
+            }
         });
     }
 
