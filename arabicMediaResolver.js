@@ -8,31 +8,31 @@ const SITE_CONFIGS = {
   topcinema: {
     name: 'TopCinema',
     baseUrl: 'https://topcinemaa.co',
-    mirrors: ['https://topcinemaa.co', 'https://topcinemaa.cam'],
+    mirrors: ['https://topcinemaa.co', 'https://topcinemaa.cam', 'https://topcinema.site', 'https://topcinema.net'],
     searchPath: '/?s='
   },
   wecima: {
     name: 'WeCima',
     baseUrl: 'https://wecima.cx',
-    mirrors: ['https://wecima.cx'],
+    mirrors: ['https://wecima.cx', 'https://wecima.show', 'https://wecima.site', 'https://mycima.cc'],
     searchPath: '/search/'
   },
   movizland: {
     name: 'Movizland',
     baseUrl: 'https://movizland.online',
-    mirrors: ['https://movizland.online', 'https://movizland.com'],
+    mirrors: ['https://movizland.online', 'https://movizland.com', 'https://movizland.site'],
     searchPath: '/?s='
   },
   qfilm: {
     name: 'QFilm',
     baseUrl: 'https://qfilm.vip',
-    mirrors: ['https://qfilm.vip'],
+    mirrors: ['https://qfilm.vip', 'https://qfilm.site'],
     searchPath: '/?s='
   },
   prestige: {
     name: 'Prestige',
     baseUrl: 'https://a.prstej.net',
-    mirrors: ['https://a.prstej.net', 'https://brstej.com'],
+    mirrors: ['https://a.prstej.net', 'https://brstej.com', 'https://b.prstej.net'],
     searchPath: '/search.php?keywords='
   }
 };
@@ -75,7 +75,7 @@ const TITLE_ALIASES = {
 const STOP_WORDS = ['مسلسل', 'فيلم', 'موسم', 'حلقة', 'كامل', 'مترجم', 'اونلاين', 'اون', 'لاين', 'مشاهدة', 'تحميل', 'hd', 'web-dl', '720p', '1080p', '4k'];
 
 const EXCLUDED_PATHS = [
-  '/full-packs', '/category/', '/recent', '/netflix', '/top-rating', '/movies', '/series', '/dmca', '/contact', '/privacy'
+  '/full-packs', '/category/', '/recent', '/netflix', '/top-rating', '/movies', '/series', '/dmca', '/contact', '/privacy', '/tag/', '/author/'
 ];
 
 function normalizeArabic(text) {
@@ -173,51 +173,25 @@ async function searchTopCinema(query) {
   if (!html) return [];
 
   const results = [];
-  const boxMatches = html.match(/<div class="Small--Box">[\s\S]*?<\/div>/gi) || [];
-  
-  for (const box of boxMatches) {
-    const hrefMatch = box.match(/href="([^"]+)"/i);
-    const titleMatch = box.match(/<h3[^>]*class="title"[^>]*>([\s\S]*?)<\/h3>/i) || box.match(/title="([^"]+)"/i);
-    const imgMatch = box.match(/data-src="([^"]+)"/i) || box.match(/src="([^"]+)"/i);
-    
-    if (hrefMatch) {
-      const href = hrefMatch[1];
-      const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : '';
-      const poster = imgMatch ? imgMatch[1] : '';
-      
-      if (href && title) {
-        results.push({
-          id: href.startsWith('http') ? href : `${SITE_CONFIGS.topcinema.baseUrl}${href}`,
-          title,
-          poster,
-          source: 'topcinema',
-          sourceName: 'TopCinema',
-          isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
-        });
-      }
+  const matches = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  for (const m of matches) {
+    let href = m[1];
+    const inner = m[2];
+    const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i) || inner.match(/style="[^"]*url\(([^)]+)\)/i);
+
+    if (title && title.length > 3 && !href.endsWith('.css') && !href.endsWith('.js') && !EXCLUDED_PATHS.some(p => href.includes(p))) {
+      if (!href.startsWith('http')) href = `${SITE_CONFIGS.topcinema.baseUrl}${href}`;
+      results.push({
+        id: href,
+        title,
+        poster: imgMatch ? imgMatch[1].replace(/['"]/g, '') : '',
+        source: 'topcinema',
+        sourceName: 'TopCinema',
+        isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
+      });
     }
   }
-
-  if (results.length === 0) {
-    const linkMatches = [...html.matchAll(/<a [^>]*href="(https?:\/\/topcinemaa\.[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
-    for (const m of linkMatches) {
-      const href = m[1];
-      const inner = m[2];
-      const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i);
-      if (title && title.length > 3 && !href.endsWith('/movies/') && !href.endsWith('/series/') && !href.includes('/category/')) {
-        results.push({
-          id: href,
-          title,
-          poster: imgMatch ? imgMatch[1] : '',
-          source: 'topcinema',
-          sourceName: 'TopCinema',
-          isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
-        });
-      }
-    }
-  }
-
   return results;
 }
 
@@ -228,31 +202,25 @@ async function searchWeCima(query) {
   if (!html) return [];
 
   const results = [];
-  const gridMatches = html.match(/<div class="GridItem"[\s\S]*?<\/ul>/gi) || html.match(/<div class="GridItem"[\s\S]*?<\/div>\s*<\/div>/gi) || [];
+  const matches = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  for (const m of matches) {
+    let href = m[1];
+    const inner = m[2];
+    const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i) || inner.match(/--image:url\(([^)]+)\)/i);
 
-  for (const grid of gridMatches) {
-    const hrefMatch = grid.match(/href="(https?:\/\/wecima\.[^"]+\/(?:watch|series)\/[^"]+)"/i) || grid.match(/href="([^"]+\/(?:watch|series)\/[^"]+)"/i);
-    const titleMatch = grid.match(/title="([^"]+)"/i) || grid.match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
-    const posterMatch = grid.match(/data-src="([^"]+)"/i) || grid.match(/itemprop="thumbnailUrl"\s+content="([^"]+)"/i) || grid.match(/--image:url\(([^)]+)\)/i);
-
-    if (hrefMatch) {
-      const href = hrefMatch[1];
-      let title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : '';
-      let poster = posterMatch ? posterMatch[1].replace(/['"]/g, '') : '';
-
-      if (href && title) {
-        results.push({
-          id: href.startsWith('http') ? href : `${SITE_CONFIGS.wecima.baseUrl}${href}`,
-          title,
-          poster,
-          source: 'wecima',
-          sourceName: 'WeCima',
-          isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
-        });
-      }
+    if (title && title.length > 3 && (href.includes('/watch/') || href.includes('/series/') || href.includes('/movie/')) && !EXCLUDED_PATHS.some(p => href.includes(p))) {
+      if (!href.startsWith('http')) href = `${SITE_CONFIGS.wecima.baseUrl}${href}`;
+      results.push({
+        id: href,
+        title,
+        poster: imgMatch ? imgMatch[1].replace(/['"]/g, '') : '',
+        source: 'wecima',
+        sourceName: 'WeCima',
+        isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
+      });
     }
   }
-
   return results;
 }
 
@@ -263,13 +231,15 @@ async function searchMovizland(query) {
   if (!html) return [];
 
   const results = [];
-  const matches = [...html.matchAll(/<a [^>]*href="(https?:\/\/movizland\.[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const matches = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
   for (const m of matches) {
-    const href = m[1];
+    let href = m[1];
     const inner = m[2];
     const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i);
-    if (title && title.length > 3 && !href.endsWith('.com/') && !href.endsWith('.online/')) {
+
+    if (title && title.length > 3 && !EXCLUDED_PATHS.some(p => href.includes(p))) {
+      if (!href.startsWith('http')) href = `${SITE_CONFIGS.movizland.baseUrl}${href}`;
       results.push({
         id: href,
         title,
@@ -280,7 +250,6 @@ async function searchMovizland(query) {
       });
     }
   }
-
   return results;
 }
 
@@ -291,13 +260,15 @@ async function searchQFilm(query) {
   if (!html) return [];
 
   const results = [];
-  const matches = [...html.matchAll(/<a [^>]*href="(https?:\/\/qfilm\.[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
+  const matches = [...html.matchAll(/<a [^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)];
   for (const m of matches) {
-    const href = m[1];
+    let href = m[1];
     const inner = m[2];
     const title = inner.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     const imgMatch = inner.match(/src="([^"]+)"/i) || inner.match(/data-src="([^"]+)"/i);
-    if (title && title.length > 3) {
+
+    if (title && title.length > 3 && !EXCLUDED_PATHS.some(p => href.includes(p))) {
+      if (!href.startsWith('http')) href = `${SITE_CONFIGS.qfilm.baseUrl}${href}`;
       results.push({
         id: href,
         title,
@@ -308,7 +279,6 @@ async function searchQFilm(query) {
       });
     }
   }
-
   return results;
 }
 
@@ -347,6 +317,42 @@ async function searchPrestige(query) {
   }
 
   return results;
+}
+
+// Web Search Fallback for Arabic Media
+async function searchWebFallback(query) {
+  try {
+    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query + ' مشاهدة وتحميل')}`;
+    const html = await fetchHtml(searchUrl);
+    if (!html) return [];
+
+    const results = [];
+    const matches = [...html.matchAll(/<a [^>]*class="result__snippet"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)] ||
+                    [...html.matchAll(/href="([^"]*(?:wecima|mycima|topcinema|movizland|qfilm|prstej|arabseed)[^"]*)"/gi)];
+    
+    const resultBlocks = [...html.matchAll(/<div [^>]*class="result__body"[^>]*>([\s\S]*?)<\/div>/gi)];
+    for (const block of resultBlocks) {
+      const hrefMatch = block[1].match(/href="([^"]+)"/i) || block[1].match(/uddg=([^"&]+)/i);
+      const titleMatch = block[1].match(/<a [^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i) || block[1].match(/<h2[^>]*>([\s\S]*?)<\/h2>/i);
+      if (hrefMatch) {
+        let href = decodeURIComponent(hrefMatch[1]);
+        const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : query;
+        if (href.includes('wecima') || href.includes('mycima') || href.includes('topcinema') || href.includes('movizland') || href.includes('qfilm') || href.includes('prstej') || href.includes('arabseed')) {
+          results.push({
+            id: href,
+            title: title,
+            poster: 'https://a.prstej.net/uploads/articles/dc077189.jpg',
+            source: 'WebSearch',
+            sourceName: 'Arabic Cinema Index',
+            isSeries: /مسلسل|حلقة|موسم|series|season/i.test(title + href)
+          });
+        }
+      }
+    }
+    return results;
+  } catch (e) {
+    return [];
+  }
 }
 
 function isRelevantTitle(title, rawQuery) {
@@ -467,7 +473,8 @@ async function searchAllSites(query) {
       searchWeCima(q),
       searchMovizland(q),
       searchQFilm(q),
-      searchPrestige(q)
+      searchPrestige(q),
+      searchWebFallback(q)
     ]);
 
     resultsArr.forEach(r => {
