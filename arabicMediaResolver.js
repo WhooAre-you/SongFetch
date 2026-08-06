@@ -135,7 +135,15 @@ async function fetchHtml(url, mirrors = []) {
   }
 
   const proxy1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-  return await fetchWithTimeout(proxy1);
+  let html = await fetchWithTimeout(proxy1);
+  if (html) return html;
+
+  const proxy2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
+  html = await fetchWithTimeout(proxy2);
+  if (html) return html;
+
+  const proxy3 = `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`;
+  return await fetchWithTimeout(proxy3);
 }
 
 // Resolve direct video file stream URL from hoster link (e.g. VidTube, UpDown, etc.)
@@ -171,6 +179,15 @@ async function resolveDirectHosterMediaUrl(url) {
       const subUrl = subMatch[1].startsWith('http') ? subMatch[1] : `${new URL(url).origin}${subMatch[1]}`;
       return subUrl;
     }
+
+    const jwMatch = html.match(/sources:\s*\[\s*\{\s*file:\s*["']([^"']+)["']/i);
+    if (jwMatch && jwMatch[1]) return jwMatch[1];
+
+    const evalMatch = html.match(/eval\(function\(p,a,c,k,e,d\).*?(https?:\/\/[^"'\s\><]+\.mp4[^"'\s\><]*)/i);
+    if (evalMatch && evalMatch[1]) return evalMatch[1];
+
+    const dataMatch = html.match(/data-(?:url|src)=["']([^"']+)["']/i);
+    if (dataMatch && dataMatch[1] && dataMatch[1].includes('.mp4')) return dataMatch[1];
   } catch (e) {
     console.error('[ArabicResolver] resolveDirectHosterMediaUrl error:', e.message);
   }
@@ -480,12 +497,26 @@ function groupSeriesResults(results) {
     const seasonMatch = titleNorm.match(/(?:الموسم|موسم|season)\s*(\d+)/i) || titleNorm.match(/\bموسم\s*(\d+)/i);
     if (seasonMatch) {
       seasonNum = parseInt(seasonMatch[1], 10) || 1;
-    } else if (titleNorm.includes('الموسم الثاني') || titleNorm.includes('موسم 2') || titleNorm.includes(' 2 ')) {
-      seasonNum = 2;
-    } else if (titleNorm.includes('الموسم الثالث') || titleNorm.includes('موسم 3')) {
-      seasonNum = 3;
-    } else if (titleNorm.includes('الموسم الرابع') || titleNorm.includes('موسم 4')) {
-      seasonNum = 4;
+    } else {
+      const ordinals = {
+        'الاول':1, 'الأول':1, 'الثاني':2, 'الثالث':3, 'الرابع':4, 'الخامس':5, 'السادس':6, 'السابع':7, 'الثامن':8, 'التاسع':9, 'العاشر':10,
+        'الحادي عشر':11, 'الثاني عشر':12, 'الثالث عشر':13, 'الرابع عشر':14, 'الخامس عشر':15, 'السادس عشر':16, 'السابع عشر':17, 'الثامن عشر':18, 'التاسع عشر':19, 'العشرون':20,
+        'الحادي والعشرون':21, 'الثاني والعشرون':22, 'الثالث والعشرون':23, 'الرابع والعشرون':24, 'الخامس والعشرون':25, 'السادس والعشرون':26, 'السابع والعشرون':27, 'الثامن والعشرون':28, 'التاسع والعشرون':29, 'الثلاثون':30
+      };
+      for (const [word, num] of Object.entries(ordinals)) {
+        if (titleNorm.includes(`الموسم ${word}`)) {
+          seasonNum = num;
+          break;
+        }
+      }
+      if (seasonNum === 1) {
+        for (let i = 2; i <= 30; i++) {
+          if (titleNorm.includes(`موسم ${i}`) || titleNorm.includes(` ${i} `)) {
+            seasonNum = i;
+            break;
+          }
+        }
+      }
     }
 
     const coreName = extractSeriesCoreName(item.title);
@@ -690,7 +721,17 @@ async function resolvePageDetails(url) {
 }
 
 async function fetchAndMergeCompleteSeries(title, primaryEpisodes = [], primarySource = 'Primary') {
-  return primaryEpisodes;
+  const unique = [];
+  const seen = new Set();
+  
+  for (const ep of primaryEpisodes) {
+    if (!seen.has(ep.number)) {
+      seen.add(ep.number);
+      unique.push(ep);
+    }
+  }
+  
+  return unique.sort((a, b) => a.number - b.number);
 }
 
 module.exports = {

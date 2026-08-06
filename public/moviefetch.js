@@ -563,6 +563,8 @@ document.addEventListener('DOMContentLoaded', () => {
         summaryTitle.textContent = epTitle;
         activeMovieTitle = epTitle;
         downloadNowBtn.disabled = true;
+        selectedDownloadOption = null; // Reset stale selection when switching episodes
+        summarySize.textContent = '-';
 
         try {
             let data;
@@ -570,8 +572,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 epUrl.includes('prstej.net') ||
                 epUrl.includes('wecima') ||
                 epUrl.includes('topcinemaa') ||
+                epUrl.includes('topcinema') ||
                 epUrl.includes('movizland') ||
-                epUrl.includes('qfilm.vip')
+                epUrl.includes('qfilm.vip') ||
+                epUrl.includes('arabseed')
             );
 
             if (isArabicEpisode) {
@@ -590,7 +594,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     data = { downloads: [] };
                 }
 
-                // yt-dlp couldn't extract → fall back to embed player page
+                // yt-dlp couldn't extract → fall back to embed player page (mark as embed, not downloadable)
                 if (!data.downloads || data.downloads.length === 0) {
                     const vidMatch = epUrl.match(/vid=([a-z0-9]+)/i);
                     const embedUrl = vidMatch
@@ -601,7 +605,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         quality: '▶ Watch Online (Prestige Player)',
                         url: embedUrl,
                         host: 'a.prstej.net',
-                        size: 'Stream'
+                        size: 'Stream',
+                        isEmbed: true  // Flag so download button opens modal instead of downloading HTML
                     }];
                 }
             } else {
@@ -631,11 +636,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         downloads.forEach((item, index) => {
             const tr = document.createElement('tr');
+            const isEmbedItem = item.isEmbed === true;
+            const qualityLabel = isEmbedItem ? `🎬 ${item.quality}` : item.quality;
             tr.innerHTML = `
                 <td style="text-align: center; vertical-align: middle;">
                     <input type="radio" name="quality-source" value="${index}" id="source-${index}">
                 </td>
-                <td><strong style="color: #fff;">${item.quality}</strong></td>
+                <td><strong style="color: ${isEmbedItem ? '#a78bfa' : '#fff'};">${qualityLabel}</strong></td>
                 <td style="color: #eab308; font-weight:600;">${item.size}</td>
                 <td style="font-family: monospace; font-size:0.8rem; color:#9ca3af;">${item.host}</td>
             `;
@@ -653,10 +660,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 selectedDownloadOption = item;
                 summarySize.textContent = item.size;
                 downloadNowBtn.disabled = false;
+                // Update button text based on embed vs download
+                downloadNowBtn.textContent = isEmbedItem ? '▶ Watch Online' : '⬇ Download Now';
             });
 
             qualitiesList.appendChild(tr);
         });
+
+        // Auto-select the first quality if only one option exists
+        if (downloads.length === 1) {
+            const firstRow = qualitiesList.querySelector('tr');
+            if (firstRow) {
+                firstRow.click();
+            }
+        }
     }
 
     // Helper: Query iTunes Movie API to fetch English plot, genre, and rating
@@ -741,8 +758,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Download Movie Button Action - Direct Native Attachment Download
-    downloadNowBtn.addEventListener('click', () => {
+    // Download Movie Button Action - Direct Native Attachment Download (with error handling)
+    downloadNowBtn.addEventListener('click', async () => {
         if (!selectedDownloadOption) return;
 
         const videoUrl = selectedDownloadOption.url || selectedDownloadOption.link || selectedDownloadOption.id;
@@ -753,13 +770,90 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        // If this is an embed URL, open in stream modal instead of downloading
+        if (selectedDownloadOption.isEmbed) {
+            const modal = document.getElementById('stream-modal');
+            const iframe = document.getElementById('stream-iframe');
+            if (modal && iframe) {
+                iframe.src = videoUrl;
+                modal.style.display = 'flex';
+                return;
+            }
+        }
+
         downloadProgress.classList.remove('hidden');
         downloadProgress.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        updateProgressUI(100, '⚡ Direct file download initiated! Your browser is saving the video file.');
+        updateProgressUI(10, '⏳ Connecting to download server...');
+        downloadNowBtn.disabled = true;
 
-        // Always trigger direct native attachment download via GET stream endpoint
         const streamEndpoint = `/api/movies/stream?url=${encodeURIComponent(videoUrl)}&title=${encodeURIComponent(movieTitleText)}`;
-        window.location.href = streamEndpoint;
+
+        try {
+            const response = await fetch(streamEndpoint);
+
+            if (!response.ok) {
+                // Server returned an error — show it in-page instead of navigating away
+                let errorMsg = 'تعذر التحميل من هذا السيرفر. جرّب سيرفر آخر.';
+                try {
+                    const errorText = await response.text();
+                    if (errorText && errorText.length < 500) errorMsg = errorText;
+                } catch (e) {}
+                downloadNowBtn.disabled = false;
+                updateProgressUI(0, `❌ ${errorMsg}`);
+                return;
+            }
+
+            updateProgressUI(30, '📥 Download in progress... Receiving video data.');
+
+            // Get total size for progress tracking
+            const contentLength = response.headers.get('content-length');
+            const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+
+            // Stream the response into a blob with progress tracking
+            const reader = response.body.getReader();
+            const chunks = [];
+            let receivedBytes = 0;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                chunks.push(value);
+                receivedBytes += value.length;
+
+                if (totalBytes > 0) {
+                    const percent = Math.min(Math.round((receivedBytes / totalBytes) * 100), 99);
+                    const downloadedMB = (receivedBytes / 1024 / 1024).toFixed(1);
+                    const totalMB = (totalBytes / 1024 / 1024).toFixed(1);
+                    updateProgressUI(percent, `📥 Downloading: ${downloadedMB} MB / ${totalMB} MB`);
+                } else {
+                    const downloadedMB = (receivedBytes / 1024 / 1024).toFixed(1);
+                    updateProgressUI(50, `📥 Downloading: ${downloadedMB} MB received...`);
+                }
+            }
+
+            updateProgressUI(100, '✅ Download complete! Saving file...');
+
+            // Create blob and trigger native file save
+            const blob = new Blob(chunks);
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = `${movieTitleText}.mp4`.replace(/[\\/:*?"<>|]/g, '_');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(blobUrl);
+
+            downloadNowBtn.disabled = false;
+            setTimeout(() => {
+                updateProgressUI(100, '✅ File saved successfully!');
+            }, 500);
+
+        } catch (err) {
+            console.error('Download failed:', err);
+            downloadNowBtn.disabled = false;
+            updateProgressUI(0, `❌ Download failed: ${err.message || 'Network error'}. Try another server.`);
+        }
     });
 
     // Wire up stream modal buttons

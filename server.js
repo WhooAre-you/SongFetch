@@ -1109,6 +1109,7 @@ app.get('/api/movies/stream', async (req, res) => {
     } catch (e) {}
 
     const checkRes = await fetch(actualVideoUrl, {
+      method: 'HEAD',
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         'Referer': hosterOrigin,
@@ -1118,15 +1119,18 @@ app.get('/api/movies/stream', async (req, res) => {
 
     const contentType = checkRes.headers.get('content-type') || '';
     if (contentType.includes('text/html')) {
-      const text = await checkRes.text();
+      const htmlRes = await fetch(actualVideoUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Referer': hosterOrigin,
+          'Accept': '*/*'
+        }
+      });
+      const text = await htmlRes.text();
       if (text.includes('copyright') || text.includes('removed') || text.includes('Notice !') || text.includes('404 Not Found')) {
         return res.status(400).send('هذا السيرفر (BowFile) ملفه محذوف بسبب الحقوق أو غير متوفر حالياً. يرجى اختيار سيرفر آخر من القائمة.');
       }
     }
-
-    const safeFilename = `${title || 'movie'}.mp4`.replace(/[\\/:*?"<>|]/g, '_');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
-    res.setHeader('Content-Type', 'video/mp4');
 
     const downloadResponse = await axios({
       url: actualVideoUrl,
@@ -1138,6 +1142,21 @@ app.get('/api/movies/stream', async (req, res) => {
         'Accept': '*/*'
       }
     });
+
+    const safeFilename = `${title || 'movie'}.mp4`.replace(/[\\/:*?"<>|]/g, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
+    
+    const upstreamContentType = downloadResponse.headers['content-type'] || contentType;
+    if (upstreamContentType && upstreamContentType.includes('video/')) {
+      res.setHeader('Content-Type', upstreamContentType);
+    } else {
+      res.setHeader('Content-Type', 'video/mp4');
+    }
+
+    const contentLength = downloadResponse.headers['content-length'];
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
 
     res.on('close', () => {
       if (downloadResponse.data && typeof downloadResponse.data.destroy === 'function') {
