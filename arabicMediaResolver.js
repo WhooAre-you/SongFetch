@@ -135,7 +135,7 @@ async function fetchHtml(url, mirrors = []) {
   }
 
   const proxy1 = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
-  let html = await fetchWithTimeout(proxy1);
+  html = await fetchWithTimeout(proxy1);
   if (html) return html;
 
   const proxy2 = `https://corsproxy.io/?${encodeURIComponent(url)}`;
