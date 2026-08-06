@@ -8,7 +8,42 @@ const { execFile } = require('child_process');
 const ffmpegPath = require('ffmpeg-static');
 const { ensureYtDlp, tempDir, formatDuration, formatSize } = require('../utils/ytDlp');
 
-const router = express.Router();
+const router = Math.random() ? express.Router() : express.Router();
+
+// Helper: Fetch remote content-length using HEAD or GET Range request (fast metadata check)
+async function getRemoteFileSize(url) {
+  if (!url) return 0;
+  try {
+    const response = await axios.head(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Referer': url.includes('instagram') ? 'https://www.instagram.com/' : (url.includes('facebook') ? 'https://www.facebook.com/' : '')
+      },
+      timeout: 4000
+    });
+    const len = response.headers['content-length'];
+    if (len) return parseInt(len, 10);
+  } catch (e) {
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Referer': url.includes('instagram') ? 'https://www.instagram.com/' : (url.includes('facebook') ? 'https://www.facebook.com/' : ''),
+          'Range': 'bytes=0-1'
+        },
+        timeout: 4000
+      });
+      const contentRange = response.headers['content-range'];
+      if (contentRange) {
+        const parts = contentRange.split('/');
+        if (parts[1]) return parseInt(parts[1], 10);
+      }
+    } catch (err) {
+      // Ignore
+    }
+  }
+  return 0;
+}
 
 // Helper: Secure in-process Snapsave script deobfuscator
 function deobfuscateSnapsave(packedScript) {
@@ -116,15 +151,29 @@ router.post('/api/mediafetch/info', async (req, res) => {
 
           if (formats.length > 0) {
             console.log(`Successfully extracted ${formats.length} Facebook formats from Snapsave.`);
+            
+            // Resolve accurate remote filesizes concurrently
+            const resolvedFormats = await Promise.all(formats.map(async f => {
+              const sizeBytes = await getRemoteFileSize(f.url);
+              return {
+                height: f.height,
+                size: sizeBytes ? formatSize(sizeBytes) : 'Unknown size',
+                url: f.url
+              };
+            }));
+
+            // Filter out any format that has no size or url
+            const bestSizeStr = resolvedFormats[0] ? resolvedFormats[0].size : 'Unknown size';
+
             return res.json({
               title: `Facebook Video (${new Date().toLocaleDateString()})`,
               thumbnail: '/favicon.svg',
               duration: 'Unknown',
               uploader: 'Facebook Video',
               platform: 'facebook',
-              formats: formats,
+              formats: resolvedFormats,
               audioSize: 'Unknown size',
-              bestSize: 'Unknown size'
+              bestSize: bestSizeStr
             });
           }
         }
@@ -161,15 +210,14 @@ router.post('/api/mediafetch/info', async (req, res) => {
         hasError = true;
       }
 
-      // If we got metadata or if we have to fall back
+      // Fallback handlers if yt-dlp fails
       if (hasError || !parsedData) {
         if (platform === 'tiktok' || platform === 'instagram' || platform === 'facebook') {
           console.log(`Using fallback metadata for platform: ${platform}`);
           
-          // For TikTok, we can try to hit the TikWM API as a fallback
           if (platform === 'tiktok') {
             try {
-              console.log('Attempting TikWM fallback for TikTok slideshow/video...');
+              console.log('Attempting TikWM fallback for TikTok video/slideshow...');
               const tikwmRes = await axios.post('https://www.tikwm.com/api/', qs.stringify({ url }), {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                 timeout: 5000
@@ -177,24 +225,41 @@ router.post('/api/mediafetch/info', async (req, res) => {
               if (tikwmRes.data && tikwmRes.data.code === 0 && tikwmRes.data.data) {
                 const tkData = tikwmRes.data.data;
                 const images = tkData.images || [];
-                return res.json({
-                  title: tkData.title || 'TikTok Slideshow',
-                  thumbnail: tkData.cover || '/favicon.svg',
-                  duration: 'Slideshow',
-                  uploader: tkData.author.unique_id || 'TikTok Creator',
-                  platform: 'tiktok',
-                  formats: [],
-                  images: images.map((img, idx) => ({ index: idx, url: img })),
-                  audioSize: 'Unknown size',
-                  bestSize: 'Unknown size'
-                });
+                
+                if (images.length > 0) {
+                  // Resolve first image size as photo size estimator
+                  const firstImgSize = await getRemoteFileSize(images[0]);
+                  return res.json({
+                    title: tkData.title || 'TikTok Slideshow',
+                    thumbnail: tkData.cover || '/favicon.svg',
+                    duration: 'Slideshow',
+                    uploader: tkData.author.unique_id || 'TikTok Creator',
+                    platform: 'tiktok',
+                    formats: [],
+                    images: images.map((img, idx) => ({ index: idx, url: img })),
+                    audioSize: 'Unknown size',
+                    bestSize: firstImgSize ? `${formatSize(firstImgSize)} per photo` : 'Unknown size'
+                  });
+                } else {
+                  const videoUrl = tkData.play;
+                  const sizeBytes = tkData.size || await getRemoteFileSize(videoUrl);
+                  return res.json({
+                    title: tkData.title || 'TikTok Video',
+                    thumbnail: tkData.cover || '/favicon.svg',
+                    duration: formatDuration(tkData.duration),
+                    uploader: tkData.author.unique_id || 'TikTok Creator',
+                    platform: 'tiktok',
+                    formats: [{ height: 'best', size: formatSize(sizeBytes), url: videoUrl }],
+                    audioSize: 'Unknown size',
+                    bestSize: formatSize(sizeBytes)
+                  });
+                }
               }
             } catch (tkErr) {
               console.error('TikWM fallback failed:', tkErr.message);
             }
           }
 
-          // Return basic generic video fallback
           return res.json({
             title: `Media from ${platform.charAt(0).toUpperCase() + platform.slice(1)}`,
             thumbnail: '/favicon.svg',
@@ -226,7 +291,6 @@ router.post('/api/mediafetch/info', async (req, res) => {
           }
         });
       } else if (parsedData.formats) {
-        // Check if formats array represents only images (common in some extractors)
         const allImages = parsedData.formats.every(f => f.vcodec === 'none' && f.acodec === 'none' && f.url && (f.url.includes('.jpg') || f.url.includes('.png')));
         if (allImages) {
           parsedData.formats.forEach((f, idx) => {
@@ -235,7 +299,7 @@ router.post('/api/mediafetch/info', async (req, res) => {
         }
       }
 
-      // Fallback to checking thumbnail as the single image if it's an image post
+      // Single photo post check
       if (images.length === 0 && (parsedData.ext === 'jpg' || parsedData.ext === 'png' || parsedData.ext === 'webp' || parsedData.vcodec === 'none')) {
         let imgUrl = parsedData.url || parsedData.thumbnail;
         if (imgUrl) {
@@ -293,7 +357,19 @@ router.post('/api/mediafetch/info', async (req, res) => {
       });
 
       const bestFormat = parsedData.formats ? parsedData.formats.sort((a, b) => (b.tbr || 0) - (a.tbr || 0))[0] : null;
-      const bestSize = parsedData.filesize || parsedData.filesize_approx || (bestFormat ? (bestFormat.filesize || bestFormat.filesize_approx) : 0);
+      let bestSizeVal = parsedData.filesize || parsedData.filesize_approx || (bestFormat ? (bestFormat.filesize || bestFormat.filesize_approx) : 0);
+
+      // If size is not present, fetch it remotely
+      if (!bestSizeVal && bestFormat && bestFormat.url) {
+        bestSizeVal = await getRemoteFileSize(bestFormat.url);
+      }
+
+      // If this is a slideshow, show average size per photo
+      let finalBestSizeStr = formatSize(bestSizeVal);
+      if (images.length > 0) {
+        const photoSize = await getRemoteFileSize(images[0].url);
+        finalBestSizeStr = photoSize ? `${formatSize(photoSize)} per photo` : 'Unknown size';
+      }
 
       let thumbnail = '/favicon.svg';
       if (parsedData.thumbnails && parsedData.thumbnails.length > 0) {
@@ -308,9 +384,9 @@ router.post('/api/mediafetch/info', async (req, res) => {
         duration: formatDuration(parsedData.duration),
         uploader: parsedData.uploader || parsedData.channel || 'Unknown',
         platform: platform,
-        formats: platform === 'youtube' ? formatOptions : [{ height: 'best', size: formatSize(bestSize) }],
+        formats: platform === 'youtube' ? formatOptions : (bestFormat && bestFormat.url ? [{ height: 'best', size: formatSize(bestSizeVal), url: bestFormat.url }] : [{ height: 'best', size: formatSize(bestSizeVal) }]),
         audioSize: formatSize(bestAudioSize),
-        bestSize: formatSize(bestSize),
+        bestSize: finalBestSizeStr,
         images: images.length > 0 ? images : null
       });
     });
@@ -320,7 +396,7 @@ router.post('/api/mediafetch/info', async (req, res) => {
   }
 });
 
-// Route: Download Video / Audio
+// Route: Download Video / Audio (via yt-dlp)
 router.post('/api/mediafetch/download', async (req, res) => {
   const { url, quality, title } = req.body;
   if (!url) {
@@ -421,9 +497,9 @@ router.post('/api/mediafetch/download', async (req, res) => {
   }
 });
 
-// Route: Proxy download for direct CDN URLs (fixes CORS and filenames)
-router.get('/api/mediafetch/download-direct', async (req, res) => {
-  const { url, title, ext } = req.query;
+// Route: POST Proxy download for direct CDN URLs (fixes CORS and filename query truncation)
+router.post('/api/mediafetch/download-direct', async (req, res) => {
+  const { url, title, ext } = req.body;
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
@@ -433,10 +509,17 @@ router.get('/api/mediafetch/download-direct', async (req, res) => {
 
   try {
     console.log(`Proxy downloading direct URL: ${url}`);
+    
+    // Configure standard browser headers to avoid CDN 403 blocks
     const response = await axios.get(url, {
       responseType: 'stream',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Referer': url.includes('instagram') ? 'https://www.instagram.com/' : (url.includes('facebook') ? 'https://www.facebook.com/' : '')
       },
       timeout: 30000
     });

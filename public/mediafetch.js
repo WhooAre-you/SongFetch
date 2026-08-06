@@ -14,6 +14,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const videoUploader = document.getElementById('video-uploader');
     const videoDuration = document.getElementById('video-duration');
     const videoPlatformLabel = document.getElementById('video-platform-label');
+    const videoFilesizeContainer = document.getElementById('video-filesize-container');
+    const videoFilesizeLabel = document.getElementById('video-filesize-label');
     
     // Selectors
     const qualitySelectorBlock = document.getElementById('quality-selector-block');
@@ -153,92 +155,98 @@ document.addEventListener('DOMContentLoaded', () => {
             videoDuration.textContent = data.duration;
             videoPlatformLabel.textContent = data.platform.toUpperCase();
 
-            // Populate selectors depending on if we have images or formats
-            if (data.images && data.images.length > 0) {
-                // Populate Photo Selection Grid
-                qualitySelectorBlock.classList.add('hidden');
-                photoSelectionContainer.classList.remove('hidden');
-                photoGrid.innerHTML = '';
-                
-                selectAllPhotos.checked = true;
-
-                data.images.forEach(img => {
-                    const card = document.createElement('div');
-                    card.className = 'photo-grid-card';
-                    card.innerHTML = `
-                        <label class="photo-grid-label">
-                            <input type="checkbox" class="photo-checkbox" data-url="${img.url}" checked>
-                            <span class="custom-checkbox-ui"></span>
-                            <img src="${img.url}" referrerpolicy="no-referrer" alt="Slide ${img.index + 1}">
-                            <div class="photo-index-badge">${img.index + 1}</div>
-                        </label>
-                    `;
-                    
-                    // Bind change listener to update download count
-                    card.querySelector('.photo-checkbox').addEventListener('change', () => {
-                        const total = photoGrid.querySelectorAll('.photo-checkbox').length;
-                        const checked = photoGrid.querySelectorAll('.photo-checkbox:checked').length;
-                        selectAllPhotos.checked = (total === checked);
-                        updateDownloadButtonText();
-                    });
-                    
-                    photoGrid.appendChild(card);
-                });
-            } else {
-                // Populate Quality Options for video
-                photoSelectionContainer.classList.add('hidden');
+            // Populate selectors and display sizes depending on YouTube vs non-YouTube
+            if (data.platform === 'youtube') {
+                // YouTube: Show dropdown, hide generic card size tag, hide photo grids
                 qualitySelectorBlock.classList.remove('hidden');
+                videoFilesizeContainer.classList.add('hidden');
+                photoSelectionContainer.classList.add('hidden');
                 
                 qualitySelect.innerHTML = '';
                 
-                if (data.platform === 'youtube') {
-                    // Add formats returned from server
-                    data.formats.forEach(f => {
-                        const h = (f && typeof f === 'object') ? f.height : f;
-                        const sizeStr = (f && typeof f === 'object') ? f.size : null;
-                        
-                        let label = `${h}p (SD)`;
-                        if (h >= 2160) label = `${h}p (4K UHD)`;
-                        else if (h >= 1440) label = `${h}p (2K QHD)`;
-                        else if (h >= 1080) label = `${h}p (Full HD)`;
-                        else if (h >= 720) label = `${h}p (HD)`;
-                        
-                        if (sizeStr) {
-                            label += ` - ${sizeStr}`;
-                        }
-                        
-                        const option = document.createElement('option');
-                        option.value = h;
-                        option.textContent = label;
-                        qualitySelect.appendChild(option);
-                    });
+                // Add formats returned from server
+                data.formats.forEach(f => {
+                    const h = (f && typeof f === 'object') ? f.height : f;
+                    const sizeStr = (f && typeof f === 'object') ? f.size : null;
+                    
+                    let label = `${h}p (SD)`;
+                    if (h >= 2160) label = `${h}p (4K UHD)`;
+                    else if (h >= 1440) label = `${h}p (2K QHD)`;
+                    else if (h >= 1080) label = `${h}p (Full HD)`;
+                    else if (h >= 720) label = `${h}p (HD)`;
+                    
+                    if (sizeStr) {
+                        label += ` - ${sizeStr}`;
+                    }
+                    
+                    const option = document.createElement('option');
+                    option.value = h;
+                    option.textContent = label;
+                    qualitySelect.appendChild(option);
+                });
 
-                    // Always add best option and audio options
-                    const bestOption = document.createElement('option');
-                    bestOption.value = 'best';
-                    bestOption.textContent = `Best Available Quality${data.bestSize ? ` - ${data.bestSize}` : ''}`;
-                    qualitySelect.insertBefore(bestOption, qualitySelect.firstChild);
+                // Always add best option and audio options
+                const bestOption = document.createElement('option');
+                bestOption.value = 'best';
+                bestOption.textContent = `Best Available Quality${data.bestSize ? ` - ${data.bestSize}` : ''}`;
+                qualitySelect.insertBefore(bestOption, qualitySelect.firstChild);
 
-                    const audioOption = document.createElement('option');
-                    audioOption.value = 'audio';
-                    audioOption.textContent = `Audio Only (MP3)${data.audioSize ? ` - ${data.audioSize}` : ''}`;
-                    qualitySelect.appendChild(audioOption);
-                } else if (data.formats && data.formats.length > 0 && data.formats[0].url) {
-                    // Direct link formats (like Facebook Snapsave)
-                    data.formats.forEach(f => {
-                        const option = document.createElement('option');
-                        option.value = 'direct';
-                        option.dataset.url = f.url;
-                        option.textContent = `${f.height}${f.size ? ` - ${f.size}` : ''}`;
-                        qualitySelect.appendChild(option);
+                const audioOption = document.createElement('option');
+                audioOption.value = 'audio';
+                audioOption.textContent = `Audio Only (MP3)${data.audioSize ? ` - ${data.audioSize}` : ''}`;
+                qualitySelect.appendChild(audioOption);
+
+            } else {
+                // Non-YouTube (TikTok, Instagram, Facebook): Hide quality dropdown, show generic card size tag
+                qualitySelectorBlock.classList.add('hidden');
+                videoFilesizeContainer.classList.remove('hidden');
+                videoFilesizeLabel.textContent = `Estimated Size: ${data.bestSize || 'Unknown'}`;
+
+                if (data.images && data.images.length > 0) {
+                    // Photo post: show photos selection container
+                    photoSelectionContainer.classList.remove('hidden');
+                    photoGrid.innerHTML = '';
+                    
+                    selectAllPhotos.checked = true;
+
+                    data.images.forEach(img => {
+                        const card = document.createElement('div');
+                        card.className = 'photo-grid-card';
+                        card.innerHTML = `
+                            <label class="photo-grid-label">
+                                <input type="checkbox" class="photo-checkbox" data-url="${img.url}" checked>
+                                <span class="custom-checkbox-ui"></span>
+                                <img src="${img.url}" referrerpolicy="no-referrer" alt="Slide ${img.index + 1}">
+                                <div class="photo-index-badge">${img.index + 1}</div>
+                            </label>
+                        `;
+                        
+                        // Bind change listener to update download count
+                        card.querySelector('.photo-checkbox').addEventListener('change', () => {
+                            const total = photoGrid.querySelectorAll('.photo-checkbox').length;
+                            const checked = photoGrid.querySelectorAll('.photo-checkbox:checked').length;
+                            selectAllPhotos.checked = (total === checked);
+                            updateDownloadButtonText();
+                        });
+                        
+                        photoGrid.appendChild(card);
                     });
                 } else {
-                    // TikTok and Instagram only download in Best Quality
-                    const bestOption = document.createElement('option');
-                    bestOption.value = 'best';
-                    const sizeStr = (data.formats && data.formats[0]) ? data.formats[0].size : data.bestSize;
-                    bestOption.textContent = `Best Quality (Watermark-Free)${sizeStr ? ` - ${sizeStr}` : ''}`;
-                    qualitySelect.appendChild(bestOption);
+                    // Video post: hide photos container
+                    photoSelectionContainer.classList.add('hidden');
+                    
+                    // Prepopulate best format options internally
+                    qualitySelect.innerHTML = '';
+                    if (data.formats && data.formats.length > 0 && data.formats[0].url) {
+                        const option = document.createElement('option');
+                        option.value = 'direct';
+                        option.dataset.url = data.formats[0].url;
+                        qualitySelect.appendChild(option);
+                    } else {
+                        const bestOption = document.createElement('option');
+                        bestOption.value = 'best';
+                        qualitySelect.appendChild(bestOption);
+                    }
                 }
             }
 
@@ -255,9 +263,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Helper: Trigger browser file download from a proxy blob stream
+    // Helper: Trigger browser file download from a proxy blob stream using POST body payloads
     async function downloadFileFromProxy(url, filename, ext, onProgress) {
-        const response = await fetch(`/api/mediafetch/download-direct?url=${encodeURIComponent(url)}&title=${encodeURIComponent(filename)}&ext=${ext}`);
+        const response = await fetch('/api/mediafetch/download-direct', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, title: filename, ext })
+        });
+
         if (!response.ok) {
             const errData = await response.json().catch(() => ({}));
             throw new Error(errData.error || 'Direct proxy download failed.');
