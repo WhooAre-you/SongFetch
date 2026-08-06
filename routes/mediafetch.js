@@ -217,6 +217,92 @@ router.post('/api/mediafetch/info', async (req, res) => {
       } catch (err) {
         console.error('Snapsave extraction failed:', err.message);
       }
+
+      // If snapsave failed, try the Facebook Embed Scraper
+      try {
+        console.log('Attempting Facebook Embed scraper fallback for slideshow:', url);
+        
+        // 1. Resolve redirect URL
+        let resolvedUrl = url;
+        try {
+          const redirectRes = await axios.get(url, { maxRedirects: 5, timeout: 6000 });
+          resolvedUrl = redirectRes.request.res.responseUrl || url;
+        } catch (redirErr) {
+          console.warn('Redirect resolution failed, using original url:', redirErr.message);
+        }
+
+        // 2. Extract canonical/og URLs if possible (fallback target)
+        let target = resolvedUrl;
+        
+        // Clean slugs in URL (e.g. posts/some-text/12345 -> posts/12345)
+        const slugRegex = /\/posts\/[^/]+\/(\d+)/i;
+        target = target.replace(slugRegex, '/posts/$1');
+
+        // Check if it's a Group post URL with group/permalink pattern
+        const groupRegex = /\/groups\/([^/]+)\/(?:permalink|posts)\/([^/?#\s]+)/i;
+        const groupMatch = target.match(groupRegex);
+        if (groupMatch) {
+          const groupId = groupMatch[1];
+          const postId = groupMatch[2];
+          target = `https://www.facebook.com/permalink.php?story_fbid=${postId}&id=${groupId}`;
+        }
+
+        // 3. Request Facebook Embed Plugin
+        const embedUrl = `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(target)}&show_text=true`;
+        console.log('Requesting embed URL:', embedUrl);
+        
+        const embedRes = await axios.get(embedUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9'
+          },
+          timeout: 8000
+        });
+        const embedHtml = embedRes.data;
+
+        // 4. Match all contentUrl values (high resolution images)
+        const contentUrlRegex = /"contentUrl"\s*:\s*"([^"]+)"/g;
+        let imgMatch;
+        const images = [];
+        while ((imgMatch = contentUrlRegex.exec(embedHtml)) !== null) {
+          const cleanUrl = imgMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+          if (!images.includes(cleanUrl)) {
+            images.push(cleanUrl);
+          }
+        }
+
+        // Fallback to normal img tags in embed if no contentUrls matched
+        if (images.length === 0) {
+          const $embed = cheerio.load(embedHtml);
+          $embed('img').each((i, el) => {
+            const src = $embed(el).attr('src');
+            if (src && (src.includes('fbcdn') || src.includes('scontent'))) {
+              const cleanUrl = src.replace(/&amp;/g, '&').replace(/\\/g, '');
+              if (!cleanUrl.includes('/t39.30808-1/') && !cleanUrl.includes('rsrc.php') && !images.includes(cleanUrl)) {
+                images.push(cleanUrl);
+              }
+            }
+          });
+        }
+
+        if (images.length > 0) {
+          console.log(`Successfully extracted ${images.length} Facebook slideshow images from Embed Scraper.`);
+          const firstImgSize = await getRemoteFileSize(images[0]);
+          return res.json({
+            title: `Facebook Post (${new Date().toLocaleDateString()})`,
+            thumbnail: images[0],
+            duration: 'Slideshow',
+            uploader: 'Facebook User',
+            platform: 'facebook',
+            formats: [],
+            images: images.map((img, idx) => ({ index: idx, url: img })),
+            audioSize: 'Unknown size',
+            bestSize: firstImgSize ? `${formatSize(firstImgSize)} per photo` : 'Unknown size'
+          });
+        }
+      } catch (embedScrapeErr) {
+        console.error('Facebook Embed Scraper failed:', embedScrapeErr.message);
+      }
     }
 
     const ytDlpBinary = await ensureYtDlp();
