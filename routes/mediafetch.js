@@ -162,7 +162,6 @@ router.post('/api/mediafetch/info', async (req, res) => {
               };
             }));
 
-            // Filter out any format that has no size or url
             const bestSizeStr = resolvedFormats[0] ? resolvedFormats[0].size : 'Unknown size';
 
             return res.json({
@@ -210,7 +209,7 @@ router.post('/api/mediafetch/info', async (req, res) => {
         hasError = true;
       }
 
-      // Fallback handlers if yt-dlp fails
+      // Fallback handlers if yt-dlp fails (e.g., photo posts, error 400 or blockings)
       if (hasError || !parsedData) {
         if (platform === 'tiktok' || platform === 'instagram' || platform === 'facebook') {
           console.log(`Using fallback metadata for platform: ${platform}`);
@@ -227,7 +226,6 @@ router.post('/api/mediafetch/info', async (req, res) => {
                 const images = tkData.images || [];
                 
                 if (images.length > 0) {
-                  // Resolve first image size as photo size estimator
                   const firstImgSize = await getRemoteFileSize(images[0]);
                   return res.json({
                     title: tkData.title || 'TikTok Slideshow',
@@ -257,6 +255,84 @@ router.post('/api/mediafetch/info', async (req, res) => {
               }
             } catch (tkErr) {
               console.error('TikWM fallback failed:', tkErr.message);
+            }
+          }
+
+          if (platform === 'instagram' || platform === 'facebook') {
+            try {
+              console.log(`Attempting HTML metadata scraping fallback for ${platform}: ${url}`);
+              const htmlRes = await axios.get(url, {
+                headers: {
+                  'Accept-Language': 'en-US,en;q=0.9'
+                },
+                timeout: 8000
+              });
+              
+              const html = htmlRes.data;
+              const $ = cheerio.load(html);
+              const title = $('meta[property="og:title"]').attr('content') || $('title').text() || 'Media File';
+              const ogImage = $('meta[property="og:image"]').attr('content');
+              const ogVideo = $('meta[property="og:video"]').attr('content') || $('meta[property="og:video:url"]').attr('content');
+              
+              if (ogVideo) {
+                // Video fallback
+                const sizeBytes = await getRemoteFileSize(ogVideo);
+                return res.json({
+                  title: title,
+                  thumbnail: ogImage || '/favicon.svg',
+                  duration: 'Unknown',
+                  uploader: `${platform.charAt(0).toUpperCase() + platform.slice(1)} Creator`,
+                  platform: platform,
+                  formats: [{ height: 'best', size: sizeBytes ? formatSize(sizeBytes) : 'Unknown size', url: ogVideo }],
+                  audioSize: 'Unknown size',
+                  bestSize: sizeBytes ? formatSize(sizeBytes) : 'Unknown size'
+                });
+              } else if (ogImage) {
+                // Photo/Slideshow fallback
+                const images = [];
+                images.push(ogImage);
+                
+                // Scan display_url values in scripts
+                const regex = /"display_url"\s*:\s*"([^"]+)"/g;
+                let match;
+                while ((match = regex.exec(html)) !== null) {
+                  try {
+                    const cleanUrl = match[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+                    if (!images.includes(cleanUrl)) {
+                      images.push(cleanUrl);
+                    }
+                  } catch(e) {}
+                }
+
+                if (platform === 'facebook') {
+                  const fbImageRegex = /"image"\s*:\s*{\s*"uri"\s*:\s*"([^"]+)"/g;
+                  let fbMatch;
+                  while ((fbMatch = fbImageRegex.exec(html)) !== null) {
+                    try {
+                      const cleanUrl = fbMatch[1].replace(/\\u0026/g, '&').replace(/\\/g, '');
+                      if (!images.includes(cleanUrl)) {
+                        images.push(cleanUrl);
+                      }
+                    } catch(e) {}
+                  }
+                }
+
+                const firstImgSize = await getRemoteFileSize(images[0]);
+
+                return res.json({
+                  title: title,
+                  thumbnail: ogImage,
+                  duration: 'Slideshow',
+                  uploader: `${platform.charAt(0).toUpperCase() + platform.slice(1)} Creator`,
+                  platform: platform,
+                  formats: [],
+                  images: images.map((img, idx) => ({ index: idx, url: img })),
+                  audioSize: 'Unknown size',
+                  bestSize: firstImgSize ? `${formatSize(firstImgSize)} per photo` : 'Unknown size'
+                });
+              }
+            } catch (scrapeErr) {
+              console.error('HTML scraper fallback failed:', scrapeErr.message);
             }
           }
 
@@ -359,12 +435,12 @@ router.post('/api/mediafetch/info', async (req, res) => {
       const bestFormat = parsedData.formats ? parsedData.formats.sort((a, b) => (b.tbr || 0) - (a.tbr || 0))[0] : null;
       let bestSizeVal = parsedData.filesize || parsedData.filesize_approx || (bestFormat ? (bestFormat.filesize || bestFormat.filesize_approx) : 0);
 
-      // If size is not present, fetch it remotely
+      // Resolve size remotely if missing
       if (!bestSizeVal && bestFormat && bestFormat.url) {
         bestSizeVal = await getRemoteFileSize(bestFormat.url);
       }
 
-      // If this is a slideshow, show average size per photo
+      // Average size for photo slideshow
       let finalBestSizeStr = formatSize(bestSizeVal);
       if (images.length > 0) {
         const photoSize = await getRemoteFileSize(images[0].url);
@@ -510,7 +586,6 @@ router.post('/api/mediafetch/download-direct', async (req, res) => {
   try {
     console.log(`Proxy downloading direct URL: ${url}`);
     
-    // Configure standard browser headers to avoid CDN 403 blocks
     const response = await axios.get(url, {
       responseType: 'stream',
       headers: {
