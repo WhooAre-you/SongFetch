@@ -400,50 +400,74 @@ router.post('/api/mediafetch/info', async (req, res) => {
               if (decoded) {
                 const cleanHtml = extractHtmlFromJs(decoded);
                 const $ = cheerio.load(cleanHtml);
-                const images = [];
-                const formats = [];
-                let isVideo = false;
+                const mediaItems = [];
 
                 $('a').each((i, el) => {
                   const href = $(el).attr('href');
                   if (href && href.startsWith('http')) {
                     const text = $(el).text().toLowerCase();
                     const cleanUrl = href.replace(/\\/g, '');
-                    if (cleanUrl.includes('.mp4') || text.includes('video')) {
-                      isVideo = true;
-                      if (!formats.includes(cleanUrl)) formats.push(cleanUrl);
-                    } else if (cleanUrl.includes('rapidcdn.app') || cleanUrl.includes('scontent') || cleanUrl.includes('cdninstagram')) {
-                      if (!images.includes(cleanUrl)) images.push(cleanUrl);
+                    if (cleanUrl.includes('download-private') || (cleanUrl.includes('facebook.com') && !cleanUrl.includes('video'))) {
+                      return;
+                    }
+                    
+                    const isVideo = cleanUrl.includes('.mp4') || text.includes('video');
+                    const isPhoto = cleanUrl.includes('rapidcdn.app') || cleanUrl.includes('scontent') || cleanUrl.includes('cdninstagram') || cleanUrl.includes('.jpg') || cleanUrl.includes('.png') || cleanUrl.includes('.webp');
+                    
+                    if (isVideo || isPhoto) {
+                      let thumbUrl = '';
+                      const parent = $(el).closest('.download-items');
+                      if (parent.length > 0) {
+                        thumbUrl = parent.find('img').attr('src') || '';
+                      }
+                      if (!thumbUrl) {
+                        thumbUrl = $(el).parent().find('img').attr('src') || '';
+                      }
+                      
+                      // Check if already exists to prevent duplicate entries of the same item
+                      const exists = mediaItems.some(item => item.url === cleanUrl);
+                      if (!exists) {
+                        mediaItems.push({
+                          url: cleanUrl,
+                          type: isVideo ? 'video' : 'image',
+                          thumbnail: thumbUrl ? thumbUrl.replace(/\\/g, '') : ''
+                        });
+                      }
                     }
                   }
                 });
 
-                if (isVideo && formats.length > 0) {
-                  console.log('Snapinsta extracted video file successfully.');
-                  const sizeBytes = await getRemoteFileSize(formats[0]);
+                if (mediaItems.length === 1 && mediaItems[0].type === 'video') {
+                  console.log('Snapinsta extracted a single video file.');
+                  const sizeBytes = await getRemoteFileSize(mediaItems[0].url);
                   return res.json({
                     title: `Instagram Video (${new Date().toLocaleDateString()})`,
-                    thumbnail: images[0] || '/favicon.svg',
+                    thumbnail: mediaItems[0].thumbnail || '/favicon.svg',
                     duration: 'Unknown',
                     uploader: 'Instagram Creator',
                     platform: 'instagram',
-                    formats: [{ height: 'best', size: sizeBytes ? formatSize(sizeBytes) : 'Unknown size', url: formats[0] }],
+                    formats: [{ height: 'best', size: sizeBytes ? formatSize(sizeBytes) : 'Unknown size', url: mediaItems[0].url }],
                     audioSize: 'Unknown size',
                     bestSize: sizeBytes ? formatSize(sizeBytes) : 'Unknown size'
                   });
-                } else if (images.length > 0) {
-                  console.log(`Successfully extracted ${images.length} Instagram slideshow images from Snapinsta.`);
-                  const firstImgSize = await getRemoteFileSize(images[0]);
+                } else if (mediaItems.length > 0) {
+                  console.log(`Successfully extracted ${mediaItems.length} Instagram items from Snapinsta.`);
+                  const firstImgSize = await getRemoteFileSize(mediaItems[0].url);
                   return res.json({
                     title: `Instagram Post (${new Date().toLocaleDateString()})`,
-                    thumbnail: images[0],
+                    thumbnail: mediaItems[0].thumbnail || mediaItems[0].url,
                     duration: 'Slideshow',
                     uploader: 'Instagram Creator',
                     platform: 'instagram',
                     formats: [],
-                    images: images.map((img, idx) => ({ index: idx, url: img })),
+                    images: mediaItems.map((item, idx) => ({
+                      index: idx,
+                      url: item.url,
+                      type: item.type,
+                      thumbnail: item.thumbnail || item.url
+                    })),
                     audioSize: 'Unknown size',
-                    bestSize: firstImgSize ? `${formatSize(firstImgSize)} per photo` : 'Unknown size'
+                    bestSize: firstImgSize ? `${formatSize(firstImgSize)} per item` : 'Unknown size'
                   });
                 }
               }
@@ -468,50 +492,73 @@ router.post('/api/mediafetch/info', async (req, res) => {
               if (decoded) {
                 const cleanHtml = extractHtmlFromJs(decoded);
                 const $ = cheerio.load(cleanHtml);
-                const images = [];
-                const formats = [];
-                let isVideo = false;
+                const mediaItems = [];
 
                 $('a').each((i, el) => {
                   const href = $(el).attr('href');
                   if (href && href.startsWith('http')) {
                     const text = $(el).text().toLowerCase();
                     const cleanUrl = href.replace(/\\/g, '');
-                    if (cleanUrl.includes('.mp4') || text.includes('video')) {
-                      isVideo = true;
-                      if (!formats.includes(cleanUrl)) formats.push(cleanUrl);
-                    } else if (cleanUrl.includes('rapidcdn.app') || cleanUrl.includes('scontent') || cleanUrl.includes('cdninstagram')) {
-                      if (!images.includes(cleanUrl)) images.push(cleanUrl);
+                    if (cleanUrl.includes('download-private') || (cleanUrl.includes('facebook.com') && !cleanUrl.includes('video'))) {
+                      return;
+                    }
+                    
+                    const isVideo = cleanUrl.includes('.mp4') || text.includes('video');
+                    const isPhoto = cleanUrl.includes('rapidcdn.app') || cleanUrl.includes('scontent') || cleanUrl.includes('cdninstagram') || cleanUrl.includes('.jpg') || cleanUrl.includes('.png') || cleanUrl.includes('.webp');
+                    
+                    if (isVideo || isPhoto) {
+                      let thumbUrl = '';
+                      const parent = $(el).closest('.download-items');
+                      if (parent.length > 0) {
+                        thumbUrl = parent.find('img').attr('src') || '';
+                      }
+                      if (!thumbUrl) {
+                        thumbUrl = $(el).parent().find('img').attr('src') || '';
+                      }
+                      
+                      const exists = mediaItems.some(item => item.url === cleanUrl);
+                      if (!exists) {
+                        mediaItems.push({
+                          url: cleanUrl,
+                          type: isVideo ? 'video' : 'image',
+                          thumbnail: thumbUrl ? thumbUrl.replace(/\\/g, '') : ''
+                        });
+                      }
                     }
                   }
                 });
 
-                if (isVideo && formats.length > 0) {
-                  console.log('Snapsave extracted video file successfully.');
-                  const sizeBytes = await getRemoteFileSize(formats[0]);
+                if (mediaItems.length === 1 && mediaItems[0].type === 'video') {
+                  console.log('Snapsave extracted a single video file.');
+                  const sizeBytes = await getRemoteFileSize(mediaItems[0].url);
                   return res.json({
                     title: `Instagram Video (${new Date().toLocaleDateString()})`,
-                    thumbnail: images[0] || '/favicon.svg',
+                    thumbnail: mediaItems[0].thumbnail || '/favicon.svg',
                     duration: 'Unknown',
                     uploader: 'Instagram Creator',
                     platform: 'instagram',
-                    formats: [{ height: 'best', size: sizeBytes ? formatSize(sizeBytes) : 'Unknown size', url: formats[0] }],
+                    formats: [{ height: 'best', size: sizeBytes ? formatSize(sizeBytes) : 'Unknown size', url: mediaItems[0].url }],
                     audioSize: 'Unknown size',
                     bestSize: sizeBytes ? formatSize(sizeBytes) : 'Unknown size'
                   });
-                } else if (images.length > 0) {
-                  console.log(`Successfully extracted ${images.length} Instagram slideshow images from Snapsave.`);
-                  const firstImgSize = await getRemoteFileSize(images[0]);
+                } else if (mediaItems.length > 0) {
+                  console.log(`Successfully extracted ${mediaItems.length} Instagram items from Snapsave.`);
+                  const firstImgSize = await getRemoteFileSize(mediaItems[0].url);
                   return res.json({
                     title: `Instagram Post (${new Date().toLocaleDateString()})`,
-                    thumbnail: images[0],
+                    thumbnail: mediaItems[0].thumbnail || mediaItems[0].url,
                     duration: 'Slideshow',
                     uploader: 'Instagram Creator',
                     platform: 'instagram',
                     formats: [],
-                    images: images.map((img, idx) => ({ index: idx, url: img })),
+                    images: mediaItems.map((item, idx) => ({
+                      index: idx,
+                      url: item.url,
+                      type: item.type,
+                      thumbnail: item.thumbnail || item.url
+                    })),
                     audioSize: 'Unknown size',
-                    bestSize: firstImgSize ? `${formatSize(firstImgSize)} per photo` : 'Unknown size'
+                    bestSize: firstImgSize ? `${formatSize(firstImgSize)} per item` : 'Unknown size'
                   });
                 }
               }
@@ -593,7 +640,12 @@ router.post('/api/mediafetch/info', async (req, res) => {
                   uploader: `${platform.charAt(0).toUpperCase() + platform.slice(1)} Creator`,
                   platform: platform,
                   formats: [],
-                  images: images.map((img, idx) => ({ index: idx, url: img })),
+                  images: images.map((img, idx) => ({
+                    index: idx,
+                    url: img,
+                    type: 'image',
+                    thumbnail: img
+                  })),
                   audioSize: 'Unknown size',
                   bestSize: firstImgSize ? `${formatSize(firstImgSize)} per photo` : 'Unknown size'
                 });
@@ -624,11 +676,14 @@ router.post('/api/mediafetch/info', async (req, res) => {
       if (parsedData.entries && parsedData.entries.length > 0) {
         parsedData.entries.forEach((entry, idx) => {
           if (entry) {
-            let imgUrl = entry.url || entry.thumbnail;
-            if (imgUrl && (imgUrl.includes('.jpg') || imgUrl.includes('.png') || imgUrl.includes('.webp') || entry.ext === 'jpg' || entry.ext === 'png')) {
+            let mediaUrl = entry.url || entry.thumbnail;
+            if (mediaUrl) {
+              const isVid = entry.ext === 'mp4' || (entry.vcodec && entry.vcodec !== 'none') || (mediaUrl.includes('.mp4'));
               images.push({
                 index: idx,
-                url: imgUrl
+                url: mediaUrl,
+                type: isVid ? 'video' : 'image',
+                thumbnail: entry.thumbnail || mediaUrl
               });
             }
           }
@@ -637,7 +692,12 @@ router.post('/api/mediafetch/info', async (req, res) => {
         const allImages = parsedData.formats.every(f => f.vcodec === 'none' && f.acodec === 'none' && f.url && (f.url.includes('.jpg') || f.url.includes('.png')));
         if (allImages) {
           parsedData.formats.forEach((f, idx) => {
-            images.push({ index: idx, url: f.url });
+            images.push({
+              index: idx,
+              url: f.url,
+              type: 'image',
+              thumbnail: f.url
+            });
           });
         }
       }
@@ -646,7 +706,7 @@ router.post('/api/mediafetch/info', async (req, res) => {
       if (images.length === 0 && (parsedData.ext === 'jpg' || parsedData.ext === 'png' || parsedData.ext === 'webp' || parsedData.vcodec === 'none')) {
         let imgUrl = parsedData.url || parsedData.thumbnail;
         if (imgUrl) {
-          images.push({ index: 0, url: imgUrl });
+          images.push({ index: 0, url: imgUrl, type: 'image', thumbnail: imgUrl });
         }
       }
 

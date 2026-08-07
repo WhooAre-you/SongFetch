@@ -88,11 +88,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function updateDownloadButtonText() {
         if (currentMediaData && currentMediaData.images) {
-            const checkedCount = photoGrid.querySelectorAll('.photo-checkbox:checked').length;
+            const checkedBoxes = photoGrid.querySelectorAll('.photo-checkbox:checked');
+            const checkedCount = checkedBoxes.length;
+            
+            let hasVideos = false;
+            checkedBoxes.forEach(cb => {
+                if (cb.getAttribute('data-type') === 'video') {
+                    hasVideos = true;
+                }
+            });
+
             if (checkedCount === 1) {
-                downloadBtnText.textContent = 'Download Single Photo';
+                downloadBtnText.textContent = hasVideos ? 'Download Single Video' : 'Download Single Photo';
             } else {
-                downloadBtnText.textContent = `Download ${checkedCount} Selected Photos`;
+                downloadBtnText.textContent = `Download ${checkedCount} Selected Media`;
             }
         } else {
             downloadBtnText.textContent = 'Download Video';
@@ -212,11 +221,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     data.images.forEach(img => {
                         const card = document.createElement('div');
                         card.className = 'photo-grid-card';
+                        const isVideo = img.type === 'video';
+                        const videoOverlay = isVideo ? `
+                            <div class="video-overlay-badge" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,0.6); border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; pointer-events: none; z-index: 2;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M8 5v14l11-7z"/></svg>
+                            </div>
+                        ` : '';
+
                         card.innerHTML = `
-                            <label class="photo-grid-label">
-                                <input type="checkbox" class="photo-checkbox" data-url="${img.url}" checked>
+                            <label class="photo-grid-label" style="position: relative; display: block;">
+                                <input type="checkbox" class="photo-checkbox" data-url="${img.url}" data-type="${img.type || 'image'}" checked>
                                 <span class="custom-checkbox-ui"></span>
-                                <img src="${img.url}" referrerpolicy="no-referrer" alt="Slide ${img.index + 1}">
+                                <img src="${img.thumbnail || img.url}" referrerpolicy="no-referrer" alt="Slide ${img.index + 1}">
+                                ${videoOverlay}
                                 <div class="photo-index-badge">${img.index + 1}</div>
                             </label>
                         `;
@@ -322,35 +339,38 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!currentMediaData) return;
 
         if (currentMediaData.images && currentMediaData.images.length > 0) {
-            // Photo download branch (downloading multiple slideshows without ZIP)
+            // Slideshow download branch (downloading multiple slideshows without ZIP)
             const checkedBoxes = photoGrid.querySelectorAll('.photo-checkbox:checked');
             if (checkedBoxes.length === 0) {
-                alert('Please select at least one photo to download.');
+                alert('Please select at least one item to download.');
                 return;
             }
-
-            const urls = Array.from(checkedBoxes).map(cb => cb.getAttribute('data-url'));
 
             downloadBtn.disabled = true;
             downloadProgress.classList.remove('hidden');
 
             try {
-                for (let i = 0; i < urls.length; i++) {
-                    const url = urls[i];
-                    const filename = `${currentMediaData.title}_photo_${i + 1}`;
+                for (let i = 0; i < checkedBoxes.length; i++) {
+                    const cb = checkedBoxes[i];
+                    const url = cb.getAttribute('data-url');
+                    const type = cb.getAttribute('data-type') || 'image';
+                    const ext = type === 'video' ? 'mp4' : 'jpg';
+                    const labelType = type === 'video' ? 'video' : 'photo';
+                    
+                    const filename = `${currentMediaData.title}_${labelType}_${i + 1}`;
                     
                     updateProgressUI(
-                        Math.round((i / urls.length) * 100), 
-                        `Downloading photo ${i + 1} of ${urls.length}: "${filename}"...`
+                        Math.round((i / checkedBoxes.length) * 100), 
+                        `Downloading ${labelType} ${i + 1} of ${checkedBoxes.length}: "${filename}"...`
                     );
 
-                    // Download photo using backend proxy
-                    await downloadFileFromProxy(url, filename, 'jpg', (percent) => {
-                        const basePercent = Math.round((i / urls.length) * 100);
-                        const progressInStep = Math.round((percent / 100) * (100 / urls.length));
+                    // Download item using backend proxy
+                    await downloadFileFromProxy(url, filename, ext, (percent) => {
+                        const basePercent = Math.round((i / checkedBoxes.length) * 100);
+                        const progressInStep = Math.round((percent / 100) * (100 / checkedBoxes.length));
                         updateProgressUI(
                             basePercent + progressInStep, 
-                            `Downloading photo ${i + 1} of ${urls.length}: ${percent}%`
+                            `Downloading ${labelType} ${i + 1} of ${checkedBoxes.length}: ${percent}%`
                         );
                     });
 
@@ -358,7 +378,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     await new Promise(r => setTimeout(r, 400));
                 }
 
-                updateProgressUI(100, 'All photos downloaded successfully!');
+                updateProgressUI(100, 'All items downloaded successfully!');
 
                 setTimeout(() => {
                     downloadBtn.disabled = false;
@@ -366,8 +386,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 3000);
 
             } catch (err) {
-                console.error('Photo download failed:', err);
-                showError(`Photo download failed: ${err.message}`);
+                console.error('Download failed:', err);
+                showError(`Download failed: ${err.message}`);
             }
 
         } else {
