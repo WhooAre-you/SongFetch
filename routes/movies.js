@@ -226,15 +226,24 @@ router.get('/api/movies/stream', async (req, res) => {
     actualVideoUrl = await arabicResolver.resolveDirectHosterMediaUrl(actualVideoUrl);
     console.log(`[Server] Stream resolved direct media URL: ${actualVideoUrl}`);
 
-    const checkRes = await fetch(actualVideoUrl, {
+    const downloadResponse = await axios({
+      url: actualVideoUrl,
+      method: 'GET',
+      responseType: 'stream',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Origin': 'https://videodownloader.site',
+        'Referer': 'https://videodownloader.site/'
       }
     });
 
-    const contentType = checkRes.headers.get('content-type') || '';
+    const contentType = downloadResponse.headers['content-type'] || '';
     if (contentType.includes('text/html')) {
-      const text = await checkRes.text();
+      const chunks = [];
+      for await (const chunk of downloadResponse.data) {
+        chunks.push(chunk);
+      }
+      const text = Buffer.concat(chunks).toString('utf-8');
       if (text.includes('copyright') || text.includes('removed') || text.includes('Notice !') || text.includes('404 Not Found')) {
         return res.status(400).send('هذا السيرفر (BowFile) ملفه محذوف بسبب الحقوق أو غير متوفر حالياً. يرجى اختيار سيرفر آخر مثل (VidTube أو UpDown أو Mdiaload) من القائمة.');
       }
@@ -244,14 +253,10 @@ router.get('/api/movies/stream', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
     res.setHeader('Content-Type', 'video/mp4');
 
-    const downloadResponse = await axios({
-      url: actualVideoUrl,
-      method: 'GET',
-      responseType: 'stream',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
+    const contentLength = downloadResponse.headers['content-length'];
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
 
     downloadResponse.data.pipe(res);
   } catch (err) {
@@ -281,15 +286,24 @@ router.post('/api/movies/download', async (req, res) => {
     actualVideoUrl = await arabicResolver.resolveDirectHosterMediaUrl(actualVideoUrl);
     console.log(`[Server] Resolved direct media stream URL: ${actualVideoUrl}`);
 
-    const checkRes = await fetch(actualVideoUrl, {
+    const downloadResponse = await axios({
+      url: actualVideoUrl,
+      method: 'GET',
+      responseType: 'stream',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Origin': 'https://videodownloader.site',
+        'Referer': 'https://videodownloader.site/'
       }
     });
 
-    const contentType = checkRes.headers.get('content-type') || '';
+    const contentType = downloadResponse.headers['content-type'] || '';
     if (contentType.includes('text/html')) {
-      const text = await checkRes.text();
+      const chunks = [];
+      for await (const chunk of downloadResponse.data) {
+        chunks.push(chunk);
+      }
+      const text = Buffer.concat(chunks).toString('utf-8');
       if (text.includes('copyright') || text.includes('removed') || text.includes('Notice !') || text.includes('404 Not Found')) {
         return res.status(400).json({
           error: 'هذا السيرفر (BowFile) ملفه محذوف بسبب الحقوق أو غير متوفر حالياً. يرجى اختيار سيرفر آخر مثل (VidTube أو UpDown أو Mdiaload) من الجدول أعلاه.'
@@ -301,14 +315,10 @@ router.post('/api/movies/download', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
     res.setHeader('Content-Type', 'video/mp4');
 
-    const downloadResponse = await axios({
-      url: actualVideoUrl,
-      method: 'GET',
-      responseType: 'stream',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
+    const contentLength = downloadResponse.headers['content-length'];
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
 
     downloadResponse.data.pipe(res);
   } catch (err) {
