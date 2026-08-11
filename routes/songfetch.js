@@ -609,9 +609,7 @@ router.get('/api/songfetch/stream', async (req, res) => {
       '-ab', '128k',
       '-f', 'mp3',
       'pipe:1'
-    ];
-
-    const ffmpegProc = spawn(ffmpegPath, ffmpegArgs);
+    ]);
 
     // Pipe ytdlp output to ffmpeg input
     ytdlpProc.stdout.pipe(ffmpegProc.stdin);
