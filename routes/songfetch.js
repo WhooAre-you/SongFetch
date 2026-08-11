@@ -331,7 +331,7 @@ async function searchMediaOptions(query, limit = 8) {
   return [];
 }
 
-// Helper: Search for full Album or Playlist via YouTube playlist search URL
+// Helper: Search for full Album or Playlist via YouTube playlist search URL (prioritizing original artist channel)
 async function searchAlbumOrPlaylist(query) {
   try {
     const searchUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}&sp=EgIQAw%3D%3D`;
@@ -354,12 +354,25 @@ async function searchAlbumOrPlaylist(query) {
     const data = JSON.parse(jsonStr);
 
     if (data.entries && data.entries.length > 0) {
-      const firstPlaylist = data.entries[0];
-      const playlistUrl = firstPlaylist.url && firstPlaylist.url.includes('list=')
-        ? firstPlaylist.url
-        : `https://www.youtube.com/playlist?list=${firstPlaylist.id}`;
+      // Clean query to find matching original artist channel
+      const cleanArtistQuery = query
+        .replace(/\b(album|playlist|البوم|ألبوم|بلايليست|بلاي\s*ليست)\b/gi, '')
+        .trim().toLowerCase();
 
-      console.log(`Found YouTube playlist for query "${query}": ${playlistUrl}`);
+      let targetPlaylist = data.entries.find(entry => {
+        const uploader = (entry.uploader || entry.channel || '').toLowerCase();
+        return uploader.includes(cleanArtistQuery) || uploader.includes('official') || uploader.includes('topic');
+      });
+
+      if (!targetPlaylist) {
+        targetPlaylist = data.entries[0];
+      }
+
+      const playlistUrl = targetPlaylist.url && targetPlaylist.url.includes('list=')
+        ? targetPlaylist.url
+        : `https://www.youtube.com/playlist?list=${targetPlaylist.id}`;
+
+      console.log(`Selected playlist for query "${query}": ${playlistUrl} (Uploader: ${targetPlaylist.uploader || targetPlaylist.channel})`);
       const playlistData = await resolveYouTubePlaylist(playlistUrl);
       if (playlistData && playlistData.tracks && playlistData.tracks.length >= 2) {
         return playlistData;
@@ -403,10 +416,13 @@ router.post('/api/search', async (req, res) => {
         return res.status(400).json({ error: 'Unsupported URL platform. Use Spotify, YouTube, or SoundCloud.' });
       }
     } else {
-      // 1. First check if search query corresponds to an Album or Playlist
-      const albumData = await searchAlbumOrPlaylist(queryOrUrl);
-      if (albumData) {
-        return res.json(albumData);
+      // ONLY check for album/playlist if explicit keywords (album, playlist, البوم, ألبوم, بلايليست, بلاي ليست) are present
+      const explicitAlbumRegex = /\b(album|playlist|البوم|ألبوم|بلايليست|بلاي\s*ليست)\b/i;
+      if (explicitAlbumRegex.test(queryOrUrl)) {
+        const albumData = await searchAlbumOrPlaylist(queryOrUrl);
+        if (albumData) {
+          return res.json(albumData);
+        }
       }
 
       if (resolveDirect) {

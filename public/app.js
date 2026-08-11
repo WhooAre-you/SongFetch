@@ -42,6 +42,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentSongData = null;
 
+    // Quick Search Pills
+    document.querySelectorAll('.quick-pill').forEach(pill => {
+        pill.addEventListener('click', () => {
+            const query = pill.getAttribute('data-query');
+            if (query) {
+                searchInput.value = query;
+                clearBtn.classList.remove('hidden');
+                searchForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+            }
+        });
+    });
+
     // Audio preview state
     let currentAudio = null;
     let audioState = { track: null, isPlaying: false, isLoading: false };
