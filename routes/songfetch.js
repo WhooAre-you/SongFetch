@@ -12,51 +12,99 @@ const { ensureYtDlp, getYtDlpArgs, ytDlpPath, tempDir, formatSize } = require('.
 const router = express.Router();
 
 // Helper: Query iTunes Search API
-async function searchiTunes(term) {
-  try {
-    console.log(`Searching iTunes API for: "${term}"`);
-    const response = await axios.get('https://itunes.apple.com/search', {
-      params: {
-        term: term,
-        media: 'music',
-        entity: 'song',
-        limit: 1
-      }
+// Number word mappings (Arabic <-> Digits)
+const numberWordsMap = [
+  { words: ['واحد و عشرين', 'واحد وعشرين', 'واحد و20', '21'], num: '21' },
+  { words: ['اثنان و عشرين', 'اثنين و عشرين', 'اثنين وعشرين', '22'], num: '22' },
+  { words: ['ثلاثة و عشرين', 'ثلاثه و عشرين', 'ثلاثه وعشرين', '23'], num: '23' },
+  { words: ['واحد', 'واحده'], num: '1' },
+  { words: ['اثنين', 'اثنان'], num: '2' },
+  { words: ['ثلاثة', 'ثلاثه'], num: '3' },
+  { words: ['اربعة', 'اربع'], num: '4' },
+  { words: ['خمسة', 'خمسه'], num: '5' },
+  { words: ['ستة', 'سته'], num: '6' },
+  { words: ['سبعة', 'سبعه'], num: '7' },
+  { words: ['ثمانية', 'ثمانيه'], num: '8' },
+  { words: ['تسعة', 'تسعه'], num: '9' },
+  { words: ['عشرة', 'عشره'], num: '10' }
+];
+
+// Transliterate Franco-Arabic and normalize Arabic letters/numbers
+function generateQueryVariants(query) {
+  if (!query) return [];
+  const variants = [query];
+
+  // 1. Swap ه and ة for Arabic words
+  const hToT = query.replace(/ه\b/g, 'ة');
+  if (hToT !== query && !variants.includes(hToT)) variants.push(hToT);
+  const tToH = query.replace(/ة\b/g, 'ه');
+  if (tToH !== query && !variants.includes(tToH)) variants.push(tToH);
+
+  // 2. Arabic letter normalization (أ/إ/آ -> ا, ى -> ي)
+  const normArabic = query
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/[\u064B-\u0652]/g, '')
+    .trim();
+  if (normArabic !== query && !variants.includes(normArabic)) variants.push(normArabic);
+
+  // 3. Convert written Arabic numbers to digits (e.g. واحد و عشرين -> 21)
+  let numConverted = query;
+  numberWordsMap.forEach(({ words, num }) => {
+    words.forEach(word => {
+      numConverted = numConverted.replace(new RegExp(word, 'gi'), num);
     });
-    if (response.data && response.data.results && response.data.results.length > 0) {
-      const track = response.data.results[0];
-      let artwork = track.artworkUrl100;
-      if (artwork) {
-        artwork = artwork.replace('100x100bb', '600x600bb').replace('100x100', '600x600');
-      }
-      return {
-        title: track.trackName,
-        artist: track.artistName,
-        album: track.collectionName,
-        artwork: artwork,
-        releaseDate: track.releaseDate
-      };
-    }
-  } catch (error) {
-    console.error('iTunes API search failed:', error.message);
+  });
+  if (numConverted !== query && !variants.includes(numConverted)) variants.push(numConverted);
+
+  // 4. Franco-Arabic to Arabic transliteration mapping
+  let francoConverted = query
+    .replace(/(\w*)3(\w*)/gi, '$1ع$2')
+    .replace(/(\w*)7(\w*)/gi, '$1ح$2')
+    .replace(/(\w*)5(\w*)/gi, '$1خ$2')
+    .replace(/(\w*)2(\w*)/gi, '$1ء$2')
+    .replace(/(\w*)8(\w*)/gi, '$1غ$2')
+    .replace(/(\w*)9(\w*)/gi, '$1ص$2')
+    .replace(/\bel\b/gi, 'ال')
+    .replace(/\bal\b/gi, 'ال')
+    .replace(/\bblil\b/gi, 'بليل')
+    .replace(/\bhelw\b/gi, 'حلوة')
+    .replace(/\bhelwa\b/gi, 'حلوة')
+    .replace(/\bnhayt\b/gi, 'نهاية')
+    .replace(/\bnehayt\b/gi, 'نهاية')
+    .replace(/\b3alam\b/gi, 'العالم')
+    .replace(/\balam\b/gi, 'العالم')
+    .replace(/\bnesena\b/gi, 'نسينا')
+    .replace(/\bnisina\b/gi, 'نسينا')
+    .replace(/\bwegz\b/gi, 'ويجز');
+
+  if (francoConverted !== query && !variants.includes(francoConverted)) {
+    variants.push(francoConverted);
+    const normFranco = generateQueryVariants(francoConverted);
+    normFranco.forEach(v => {
+      if (!variants.includes(v)) variants.push(v);
+    });
   }
-  return null;
+
+  return variants;
 }
 
-// Helper: Search iTunes API for multiple matches
-async function searchiTunesMultiple(term, limit = 10) {
-  try {
-    console.log(`Searching iTunes API for multiple matches: "${term}"`);
-    const response = await axios.get('https://itunes.apple.com/search', {
-      params: {
-        term: term,
-        media: 'music',
-        entity: 'song',
-        limit: limit
-      }
-    });
-    if (response.data && response.data.results && response.data.results.length > 0) {
-      return response.data.results.map(track => {
+// Single item search with multi-pass query variant resolution
+async function searchiTunes(term) {
+  const queryVariants = generateQueryVariants(term);
+  for (const queryTerm of queryVariants) {
+    try {
+      console.log(`Searching iTunes API for: "${queryTerm}"`);
+      const response = await axios.get('https://itunes.apple.com/search', {
+        params: {
+          term: queryTerm,
+          media: 'music',
+          entity: 'song',
+          limit: 1
+        }
+      });
+      if (response.data && response.data.results && response.data.results.length > 0) {
+        const track = response.data.results[0];
         let artwork = track.artworkUrl100;
         if (artwork) {
           artwork = artwork.replace('100x100bb', '600x600bb').replace('100x100', '600x600');
@@ -64,16 +112,63 @@ async function searchiTunesMultiple(term, limit = 10) {
         return {
           title: track.trackName,
           artist: track.artistName,
-          album: track.collectionName || 'Single',
+          album: track.collectionName,
           artwork: artwork,
-          youtubeUrl: '' // resolved when selected
+          releaseDate: track.releaseDate
         };
-      });
+      }
+    } catch (error) {
+      console.error('iTunes API search failed for variant:', queryTerm, error.message);
     }
-  } catch (error) {
-    console.error('iTunes API multiple search failed:', error.message);
   }
-  return [];
+  return null;
+}
+
+// Multi-item search with multi-pass query variant resolution
+async function searchiTunesMultiple(term, limit = 10) {
+  const queryVariants = generateQueryVariants(term);
+  const seenTracks = new Set();
+  const allResults = [];
+
+  for (const queryTerm of queryVariants) {
+    try {
+      console.log(`Searching iTunes API for multiple matches: "${queryTerm}"`);
+      const response = await axios.get('https://itunes.apple.com/search', {
+        params: {
+          term: queryTerm,
+          media: 'music',
+          entity: 'song',
+          limit: limit
+        }
+      });
+      if (response.data && response.data.results && response.data.results.length > 0) {
+        response.data.results.forEach(track => {
+          const trackKey = `${(track.artistName || '').toLowerCase()} - ${(track.trackName || '').toLowerCase()}`;
+          if (!seenTracks.has(trackKey)) {
+            seenTracks.add(trackKey);
+            let artwork = track.artworkUrl100;
+            if (artwork) {
+              artwork = artwork.replace('100x100bb', '600x600bb').replace('100x100', '600x600');
+            }
+            allResults.push({
+              title: track.trackName,
+              artist: track.artistName,
+              album: track.collectionName || 'Single',
+              artwork: artwork,
+              youtubeUrl: ''
+            });
+          }
+        });
+        if (allResults.length >= limit) {
+          return allResults.slice(0, limit);
+        }
+      }
+    } catch (error) {
+      console.error('iTunes API multiple search failed for variant:', queryTerm, error.message);
+    }
+  }
+
+  return allResults;
 }
 
 // Helper: Query iTunes Lookup API
