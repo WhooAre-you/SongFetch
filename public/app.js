@@ -631,10 +631,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function buildStreamUrl(track) {
+        if (track.title && track.artist) {
+            return `/api/songfetch/stream?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}&url=${encodeURIComponent(track.youtubeUrl || '')}`;
+        }
         if (track.youtubeUrl && track.youtubeUrl.startsWith('http')) {
             return `/api/songfetch/stream?url=${encodeURIComponent(track.youtubeUrl)}`;
         }
-        return `/api/songfetch/stream?title=${encodeURIComponent(track.title)}&artist=${encodeURIComponent(track.artist)}`;
+        return `/api/songfetch/stream?title=${encodeURIComponent(track.title || '')}&artist=${encodeURIComponent(track.artist || '')}`;
     }
 
     function stopAudioPreview() {

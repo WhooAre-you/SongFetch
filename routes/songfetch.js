@@ -577,11 +577,9 @@ router.get('/api/songfetch/stream', async (req, res) => {
   const { url, title, artist } = req.query;
 
   let streamUrl = url;
-  if (!streamUrl && title && artist) {
-    streamUrl = `ytsearch1:${artist} - ${title} (Official Audio)`;
-  }
-
-  if (!streamUrl) {
+  if (title && artist) {
+    streamUrl = `scsearch1:${artist} ${title}`;
+  } else if (!streamUrl) {
     return res.status(400).json({ error: 'URL or title/artist is required' });
   }
 
@@ -594,11 +592,12 @@ router.get('/api/songfetch/stream', async (req, res) => {
 
     console.log(`Starting audio stream using yt-dlp to stdout for: ${streamUrl}`);
 
-    const ytdlpArgs = getYtDlpArgs([
-      '-f', 'bestaudio',
+    const ytdlpArgs = [
+      '--no-cache-dir',
+      '-f', 'ba/b',
       '-o', '-',
       streamUrl
-    ]);
+    ];
 
     const ytdlpProc = spawn(ytDlpBinary, ytdlpArgs);
 
