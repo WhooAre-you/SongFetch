@@ -153,6 +153,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
         resetUI();
         
+        const quickSearchContainer = document.getElementById('quick-search-container');
+        if (quickSearchContainer) {
+            quickSearchContainer.classList.add('hidden');
+        }
+        
         // Show loading state
         loader.classList.remove('hidden');
         loaderText.textContent = "Connecting to server...";
