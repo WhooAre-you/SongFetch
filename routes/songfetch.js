@@ -416,9 +416,10 @@ router.post('/api/download', async (req, res) => {
     console.log(`Starting audio download using yt-dlp for: ${downloadUrl}`);
     
     const args = getYtDlpArgs([
+      '-f', 'ba/b',
       '-x',
       '--audio-format', 'mp3',
-      '--audio-quality', '0',
+      '--audio-quality', '5',
       '--ffmpeg-location', ffmpegDir,
       '-o', path.join(tempDir, `${tempId}.%(ext)s`),
       downloadUrl
