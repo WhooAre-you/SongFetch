@@ -391,7 +391,29 @@ router.post('/api/search', async (req, res) => {
   }
 });
 
+// Helper to execute audio download via yt-dlp with fallback
+async function executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, targetUrl) {
+  const finalMp3Path = path.join(tempDir, `${tempId}.mp3`);
+  const args = getYtDlpArgs([
+    '-f', 'ba/b',
+    '-x',
+    '--audio-format', 'mp3',
+    '--audio-quality', '5',
+    '--ffmpeg-location', ffmpegDir,
+    '-o', path.join(tempDir, `${tempId}.%(ext)s`),
+    targetUrl
+  ]);
 
+  return new Promise((resolve, reject) => {
+    execFile(ytDlpBinary, args, (error, stdout, stderr) => {
+      if (error) {
+        reject({ error, stderr });
+      } else {
+        resolve(finalMp3Path);
+      }
+    });
+  });
+}
 
 // Route: Download & Embed Metadata
 router.post('/api/download', async (req, res) => {
@@ -414,75 +436,72 @@ router.post('/api/download', async (req, res) => {
     const ffmpegDir = path.dirname(ffmpegPath);
 
     console.log(`Starting audio download using yt-dlp for: ${downloadUrl}`);
-    
-    const args = getYtDlpArgs([
-      '-f', 'ba/b',
-      '-x',
-      '--audio-format', 'mp3',
-      '--audio-quality', '5',
-      '--ffmpeg-location', ffmpegDir,
-      '-o', path.join(tempDir, `${tempId}.%(ext)s`),
-      downloadUrl
-    ]);
+    let downloadedPath = null;
 
-    execFile(ytDlpBinary, args, async (error, stdout, stderr) => {
-      if (error) {
-        console.error('yt-dlp execution error:', error.message);
-        console.error('yt-dlp stderr:', stderr);
-        return res.status(500).json({ error: `Audio download and conversion failed. Detail: ${error.message}. Stderr: ${stderr}` });
+    try {
+      downloadedPath = await executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, downloadUrl);
+    } catch (primaryErr) {
+      console.warn('Primary download failed, trying SoundCloud fallback...', primaryErr.stderr || primaryErr.error.message);
+      const scFallbackUrl = `scsearch1:${artist} ${title}`;
+      try {
+        downloadedPath = await executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, scFallbackUrl);
+      } catch (scErr) {
+        throw new Error(`Audio download failed: ${primaryErr.stderr || primaryErr.error.message}`);
       }
+    }
 
-      console.log('yt-dlp finished download and mp3 conversion.');
+    console.log('yt-dlp finished download and mp3 conversion.');
 
-      if (!fs.existsSync(finalMp3Path)) {
-        console.error(`Expected MP3 file not found at: ${finalMp3Path}`);
-        return res.status(500).json({ error: 'Converted MP3 file was not generated.' });
+    if (!fs.existsSync(finalMp3Path)) {
+      console.error(`Expected MP3 file not found at: ${finalMp3Path}`);
+      return res.status(500).json({ error: 'Converted MP3 file was not generated.' });
+    }
+
+    let coverBuffer = null;
+    if (artwork) {
+      try {
+        console.log(`Downloading cover artwork: ${artwork}`);
+        const imageResponse = await axios.get(artwork, { responseType: 'arraybuffer' });
+        coverBuffer = Buffer.from(imageResponse.data);
+      } catch (imgError) {
+        console.warn('Failed to download cover art image:', imgError.message);
       }
+    }
 
-      let coverBuffer = null;
-      if (artwork) {
-        try {
-          console.log(`Downloading cover artwork: ${artwork}`);
-          const imageResponse = await axios.get(artwork, { responseType: 'arraybuffer' });
-          coverBuffer = Buffer.from(imageResponse.data);
-        } catch (imgError) {
-          console.warn('Failed to download cover art image:', imgError.message);
-        }
-      }
+    console.log('Embedding ID3 tags (Title, Artist, Album, Cover art) into MP3...');
+    const tags = {
+      title: title,
+      artist: artist,
+      album: album || '',
+      image: coverBuffer ? {
+        mime: 'image/jpeg',
+        type: {
+          id: 3,
+          name: 'front cover'
+        },
+        description: 'Cover Art',
+        imageBuffer: coverBuffer
+      } : undefined
+    };
 
-      console.log('Embedding ID3 tags (Title, Artist, Album, Cover art) into MP3...');
-      const tags = {
-        title: title,
-        artist: artist,
-        album: album || '',
-        image: coverBuffer ? {
-          mime: 'image/jpeg',
-          type: {
-            id: 3,
-            name: 'front cover'
-          },
-          description: 'Cover Art',
-          imageBuffer: coverBuffer
-        } : undefined
-      };
-
-      const success = nodeID3.write(tags, finalMp3Path);
-      if (!success) {
-        console.warn('Warning: Failed to write ID3 tags to the MP3 file.');
+    nodeID3.write(tags, finalMp3Path, (tagError) => {
+      if (tagError) {
+        console.warn('Failed to embed ID3 tags:', tagError);
       } else {
         console.log('ID3 tags embedded successfully.');
       }
 
       const safeFilename = `${artist} - ${title}.mp3`.replace(/[\\/:*?"<>|]/g, '_');
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
+      
       res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
 
       const fileStream = fs.createReadStream(finalMp3Path);
       fileStream.pipe(res);
 
       fileStream.on('end', () => {
-        fs.unlink(finalMp3Path, (err) => {
-          if (err) console.error('Failed to delete temporary file:', err.message);
+        fs.unlink(finalMp3Path, (unlinkErr) => {
+          if (unlinkErr) console.error('Failed to delete temp file:', unlinkErr);
           else console.log(`Temporary file cleaned up: ${finalMp3Path}`);
         });
       });
@@ -583,10 +602,11 @@ router.get('/api/songfetch/stream', async (req, res) => {
 
     const ytdlpProc = spawn(ytDlpBinary, ytdlpArgs);
 
-    const ffmpegArgs = [
+    const ffmpegProc = spawn(ffmpegPath, [
       '-i', 'pipe:0',
-      '-codec:a', 'libmp3lame',
-      '-b:a', '128k',
+      '-vn',
+      '-acodec', 'libmp3lame',
+      '-ab', '128k',
       '-f', 'mp3',
       'pipe:1'
     ];
