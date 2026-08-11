@@ -1,65 +1,44 @@
-const CACHE_NAME = 'songfetch-v5';
-const ASSETS = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/app.js',
-  '/manifest.json',
-  '/mediafetch.html',
-  '/mediafetch.js',
-  '/songfetch.html',
-  '/omnifetch.css',
-  '/moviefetch.html',
-  '/moviefetch.css',
-  '/moviefetch.js'
-];
+const CACHE_NAME = 'songfetch-v6';
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    }).then(() => self.skipWaiting())
-  );
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) => {
       return Promise.all(
-        keys.map((key) => {
-          if (key !== CACHE_NAME) {
-            return caches.delete(key);
-          }
-        })
+        keys.map((key) => caches.delete(key))
       );
     }).then(() => self.clients.claim())
   );
 });
 
 self.addEventListener('fetch', (e) => {
-  // Only handle GET requests for local assets
   if (e.request.method !== 'GET' || !e.request.url.startsWith(self.location.origin)) {
     return;
   }
-  
+
+  // Never cache API routes
+  if (e.request.url.includes('/api/')) {
+    return;
+  }
+
+  // Network-First strategy: always fetch fresh from network on normal refresh!
   e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(e.request).then((networkResponse) => {
-        // Do not cache API endpoints
-        if (e.request.url.includes('/api/')) {
-          return networkResponse;
+    fetch(e.request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(e.request, responseClone);
+          });
         }
-        return caches.open(CACHE_NAME).then((cache) => {
-          cache.put(e.request, networkResponse.clone());
-          return networkResponse;
-        });
-      });
-    }).catch(() => {
-      // Offline fallback
-      return caches.match('/');
-    })
+        return networkResponse;
+      })
+      .catch(() => {
+        // Offline fallback
+        return caches.match(e.request).then((cached) => cached || caches.match('/'));
+      })
   );
 });
