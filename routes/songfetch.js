@@ -247,16 +247,42 @@ function extractEntriesFromYtDlp(data, albumLabel) {
   return options;
 }
 
-// Helper: Search YouTube & SoundCloud via multi-pass query variants
+// Helper: Search YouTube & SoundCloud via fast primary query execution
 async function searchMediaOptions(query, limit = 8) {
   const queryVariants = generateQueryVariants(query);
+  const primaryQuery = queryVariants[0] || query;
 
-  for (const queryTerm of queryVariants) {
-    console.log(`Searching YouTube for query variant: "${queryTerm}"`);
+  // 1. Try primary query on YouTube immediately (Fast Path)
+  console.log(`Searching YouTube for: "${primaryQuery}"`);
+  try {
+    const args = getYtDlpArgs([
+      '-J',
+      `ytsearch${limit}:${primaryQuery}`
+    ]);
+    const ytDlpBinary = await ensureYtDlp();
+    const jsonStr = await new Promise((resolve, reject) => {
+      execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+        if (error) reject(new Error(stderr || error.message));
+        else resolve(stdout);
+      });
+    });
+    const data = JSON.parse(jsonStr);
+    const options = extractEntriesFromYtDlp(data, 'YouTube Search Result');
+    if (options && options.length > 0) {
+      return options;
+    }
+  } catch (err) {
+    console.error('Primary YouTube search error:', primaryQuery, err.message);
+  }
+
+  // 2. If primary query returned no results, try first transliterated variant
+  const secondaryQuery = queryVariants.find(v => v !== primaryQuery);
+  if (secondaryQuery) {
+    console.log(`Searching YouTube for secondary variant: "${secondaryQuery}"`);
     try {
       const args = getYtDlpArgs([
         '-J',
-        `ytsearch${limit}:${queryTerm}`
+        `ytsearch${limit}:${secondaryQuery}`
       ]);
       const ytDlpBinary = await ensureYtDlp();
       const jsonStr = await new Promise((resolve, reject) => {
@@ -271,34 +297,32 @@ async function searchMediaOptions(query, limit = 8) {
         return options;
       }
     } catch (err) {
-      console.error('YouTube search variant error:', queryTerm, err.message);
+      console.error('Secondary YouTube search error:', secondaryQuery, err.message);
     }
   }
 
-  // Fallback to SoundCloud search
-  for (const queryTerm of queryVariants) {
-    console.log(`Searching SoundCloud for query variant: "${queryTerm}"`);
-    try {
-      const args = [
-        '--no-cache-dir',
-        '-J',
-        `scsearch${limit}:${queryTerm}`
-      ];
-      const ytDlpBinary = await ensureYtDlp();
-      const jsonStr = await new Promise((resolve, reject) => {
-        execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
-          if (error) reject(new Error(stderr || error.message));
-          else resolve(stdout);
-        });
+  // 3. Fallback to SoundCloud search
+  console.log(`Searching SoundCloud for: "${primaryQuery}"`);
+  try {
+    const args = [
+      '--no-cache-dir',
+      '-J',
+      `scsearch${limit}:${primaryQuery}`
+    ];
+    const ytDlpBinary = await ensureYtDlp();
+    const jsonStr = await new Promise((resolve, reject) => {
+      execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+        if (error) reject(new Error(stderr || error.message));
+        else resolve(stdout);
       });
-      const data = JSON.parse(jsonStr);
-      const options = extractEntriesFromYtDlp(data, 'SoundCloud Search Result');
-      if (options && options.length > 0) {
-        return options;
-      }
-    } catch (err) {
-      console.error('SoundCloud search variant error:', queryTerm, err.message);
+    });
+    const data = JSON.parse(jsonStr);
+    const options = extractEntriesFromYtDlp(data, 'SoundCloud Search Result');
+    if (options && options.length > 0) {
+      return options;
     }
+  } catch (err) {
+    console.error('SoundCloud search error:', primaryQuery, err.message);
   }
 
   return [];
