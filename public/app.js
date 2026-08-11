@@ -13,10 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const songTitle = document.getElementById('song-title');
     const songArtist = document.getElementById('song-artist');
     const songAlbum = document.getElementById('song-album');
-    const lyricsText = document.getElementById('lyrics-text');
-    const lyricsAccordion = document.querySelector('.lyrics-accordion');
-    const lyricsToggleBtn = document.getElementById('lyrics-toggle-btn');
-    const lyricsViewport = document.getElementById('lyrics-viewport');
+
     
     // Download elements
     const downloadBtn = document.getElementById('download-btn');
@@ -70,22 +67,7 @@ document.addEventListener('DOMContentLoaded', () => {
         searchInput.focus();
     });
 
-    // Toggle Lyrics Accordion
-    lyricsToggleBtn.addEventListener('click', () => {
-        const isOpen = lyricsAccordion.classList.contains('open');
-        if (isOpen) {
-            lyricsAccordion.classList.remove('open');
-            lyricsViewport.style.maxHeight = '0px';
-        } else {
-            lyricsAccordion.classList.add('open');
-            // Give it dynamic max-height for transition
-            lyricsViewport.style.maxHeight = '400px';
-            // Scroll to lyrics smoothly
-            setTimeout(() => {
-                lyricsAccordion.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }, 100);
-        }
-    });
+
 
     // Reset UI states before a new search
     function resetUI() {
@@ -97,8 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
         downloadProgress.classList.add('hidden');
         downloadBtn.disabled = false;
         
-        lyricsAccordion.classList.remove('open');
-        lyricsViewport.style.maxHeight = '0px';
+
         
         progressFill.style.width = '0%';
         progressPercent.textContent = '0%';
@@ -325,7 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 songTitle.textContent = data.title;
                 songArtist.textContent = data.artist;
                 songAlbum.textContent = data.album || 'Single';
-                lyricsText.textContent = data.lyrics || 'Lyrics not found on Genius.';
+
 
                 // Show result section and player bar
                 resultSection.classList.remove('hidden');
@@ -366,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (simulatedProgress > 45 && simulatedProgress <= 70) {
                     status = 'Converting audio to MP3 using FFmpeg...';
                 } else if (simulatedProgress > 70) {
-                    status = 'Embedding ID3 metadata & Genius lyrics...';
+                    status = 'Embedding ID3 metadata & cover art...';
                 }
 
                 updateProgressUI(simulatedProgress, status);
@@ -488,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {
             songTitle.textContent = data.title;
             songArtist.textContent = data.artist;
             songAlbum.textContent = data.album || 'Single';
-            lyricsText.textContent = data.lyrics || 'Lyrics not found.';
+
 
             // Reset download button
             downloadBtn.disabled = false;

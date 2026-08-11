@@ -546,11 +546,6 @@ router.post('/api/search', async (req, res) => {
       return res.status(404).json({ error: 'Failed to extract song metadata.' });
     }
 
-    if (!metadata.isPlaylist) {
-      const lyrics = await scrapeGeniusLyrics(metadata.title, metadata.artist);
-      metadata.lyrics = lyrics;
-    }
-
     res.json(metadata);
   } catch (error) {
     console.error('API Search route error:', error.message);
@@ -614,15 +609,11 @@ router.post('/api/download', async (req, res) => {
         }
       }
 
-      console.log('Embedding ID3 tags (Title, Artist, Album, Lyrics, Cover art) into MP3...');
+      console.log('Embedding ID3 tags (Title, Artist, Album, Cover art) into MP3...');
       const tags = {
         title: title,
         artist: artist,
         album: album || '',
-        unsynchronisedLyrics: lyrics ? {
-          language: 'eng',
-          text: lyrics
-        } : undefined,
         image: coverBuffer ? {
           mime: 'image/jpeg',
           type: {
