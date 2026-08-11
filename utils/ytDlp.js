@@ -28,8 +28,6 @@ async function ensureYtDlp() {
   let url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
   if (isWindows) {
     url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe';
-  } else if (process.platform === 'linux') {
-    url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
   } else if (process.platform === 'darwin') {
     url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos';
   }
@@ -63,6 +61,50 @@ async function ensureYtDlp() {
   }
 }
 
+// Ensure cookies.txt if YOUTUBE_COOKIES env var is present
+function getCookiesPath() {
+  const envCookies = process.env.YOUTUBE_COOKIES;
+  const cookiesPath = path.join(tempDir, 'cookies.txt');
+  
+  if (envCookies) {
+    try {
+      let content = envCookies;
+      if (!envCookies.includes('Netscape') && !envCookies.includes('youtube.com')) {
+        // Base64 encoded
+        content = Buffer.from(envCookies, 'base64').toString('utf-8');
+      }
+      fs.writeFileSync(cookiesPath, content, 'utf-8');
+      return cookiesPath;
+    } catch (e) {
+      console.warn('Failed to parse YOUTUBE_COOKIES env var:', e.message);
+    }
+  }
+
+  const rootCookies = path.join(projectRoot, 'cookies.txt');
+  if (fs.existsSync(rootCookies)) {
+    return rootCookies;
+  }
+  if (fs.existsSync(cookiesPath)) {
+    return cookiesPath;
+  }
+  return null;
+}
+
+// Get standardized robust yt-dlp arguments for bypassing bot verification
+function getYtDlpArgs(customArgs = []) {
+  const baseArgs = [
+    '--no-cache-dir',
+    '--extractor-args', 'youtube:player_client=mweb,android,ios,web_creator,tv_embedded'
+  ];
+
+  const cookiesFile = getCookiesPath();
+  if (cookiesFile) {
+    baseArgs.push('--cookies', cookiesFile);
+  }
+
+  return [...baseArgs, ...customArgs];
+}
+
 // Helper: Format duration from seconds to MM:SS
 function formatDuration(seconds) {
   if (!seconds) return '0:00';
@@ -91,6 +133,7 @@ function formatSize(bytes) {
 
 module.exports = {
   ensureYtDlp,
+  getYtDlpArgs,
   ytDlpPath,
   tempDir,
   binDir,

@@ -7,7 +7,7 @@ const { execFile, spawn } = require('child_process');
 const nodeID3 = require('node-id3');
 const ffmpegPath = require('ffmpeg-static');
 const { resolveYouTubePlaylist, resolveSoundCloudPlaylist } = require('../playlistResolvers');
-const { ensureYtDlp, ytDlpPath, tempDir, formatSize } = require('../utils/ytDlp');
+const { ensureYtDlp, getYtDlpArgs, ytDlpPath, tempDir, formatSize } = require('../utils/ytDlp');
 
 const router = express.Router();
 
@@ -396,12 +396,10 @@ router.post('/api/search', async (req, res) => {
         if (!metadata) {
           console.log(`Query "${queryOrUrl}" not found on iTunes for direct lookup. Trying YouTube search fallback...`);
           try {
-            const args = [
-              '--extractor-args', 'youtube:player_client=mweb,android',
-              '--no-cache-dir',
+            const args = getYtDlpArgs([
               '-J',
               `ytsearch1:${queryOrUrl}`
-            ];
+            ]);
             const ytDlpBinary = await ensureYtDlp();
             const jsonStr = await new Promise((resolve, reject) => {
               execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
@@ -493,12 +491,10 @@ router.post('/api/search', async (req, res) => {
         if (!options || options.length === 0) {
           console.log(`Query "${queryOrUrl}" not found on iTunes. Trying YouTube search fallback...`);
           try {
-            const args = [
-              '--extractor-args', 'youtube:player_client=mweb,android',
-              '--no-cache-dir',
+            const args = getYtDlpArgs([
               '-J',
               `ytsearch8:${queryOrUrl}`
-            ];
+            ]);
             const ytDlpBinary = await ensureYtDlp();
             const jsonStr = await new Promise((resolve, reject) => {
               execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
@@ -584,16 +580,14 @@ router.post('/api/download', async (req, res) => {
 
     console.log(`Starting audio download using yt-dlp for: ${downloadUrl}`);
     
-    const args = [
-      '--extractor-args', 'youtube:player_client=mweb,android',
-      '--no-cache-dir',
+    const args = getYtDlpArgs([
       '-x',
       '--audio-format', 'mp3',
       '--audio-quality', '0',
       '--ffmpeg-location', ffmpegDir,
       '-o', path.join(tempDir, `${tempId}.%(ext)s`),
       downloadUrl
-    ];
+    ]);
 
     execFile(ytDlpBinary, args, async (error, stdout, stderr) => {
       if (error) {
@@ -690,13 +684,11 @@ router.post('/api/songfetch/size', async (req, res) => {
 
   try {
     const ytDlpBinary = await ensureYtDlp();
-    const args = [
-      '--extractor-args', 'youtube:player_client=mweb,android',
-      '--no-cache-dir',
+    const args = getYtDlpArgs([
       '-J',
       '--no-playlist',
       downloadUrl
-    ];
+    ]);
 
     execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
       if (error) {
@@ -751,13 +743,11 @@ router.get('/api/songfetch/stream', async (req, res) => {
 
     console.log(`Starting audio stream using yt-dlp to stdout for: ${streamUrl}`);
 
-    const ytdlpArgs = [
-      '--extractor-args', 'youtube:player_client=mweb,android',
-      '--no-cache-dir',
+    const ytdlpArgs = getYtDlpArgs([
       '-f', 'bestaudio',
       '-o', '-',
       streamUrl
-    ];
+    ]);
 
     const ytdlpProc = spawn(ytDlpBinary, ytdlpArgs);
 
