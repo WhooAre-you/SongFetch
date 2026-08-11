@@ -247,10 +247,65 @@ function extractEntriesFromYtDlp(data, albumLabel) {
   return options;
 }
 
+const OFFICIAL_ARTISTS = {
+  'cairokee': {
+    name: 'Cairokee',
+    youtubeUrl: 'https://www.youtube.com/channel/UCp-brkrLhdNTkAVoR1qHm3A',
+    soundcloudUrl: 'https://soundcloud.com/cairokee'
+  },
+  'lege-cy': {
+    name: 'Lege-Cy',
+    youtubeUrl: 'https://www.youtube.com/channel/UC6qISBBK0xjYu5GjxQH0ucw',
+    soundcloudUrl: 'https://soundcloud.com/lege-cy'
+  },
+  'marwan moussa': {
+    name: 'Marwan Moussa',
+    youtubeUrl: 'https://www.youtube.com/channel/UCyhPbGq7URXWz61w-1meiKg',
+    soundcloudUrl: null
+  },
+  'mond': {
+    name: 'Mond',
+    youtubeUrl: 'https://www.youtube.com/@Ilmond',
+    soundcloudUrl: 'https://soundcloud.com/muhab-music'
+  },
+  'ilmond': {
+    name: 'Mond',
+    youtubeUrl: 'https://www.youtube.com/@Ilmond',
+    soundcloudUrl: 'https://soundcloud.com/muhab-music'
+  },
+  'muhab': {
+    name: 'Mond',
+    youtubeUrl: 'https://www.youtube.com/@Ilmond',
+    soundcloudUrl: 'https://soundcloud.com/muhab-music'
+  },
+  'abyusif': {
+    name: 'Abyusif',
+    youtubeUrl: 'https://www.youtube.com/channel/UC11DKpZ9mdjdb5fbdb7ulRw',
+    soundcloudUrl: 'https://soundcloud.com/abyusif-scmusic'
+  },
+  'ابيو': {
+    name: 'Abyusif',
+    youtubeUrl: 'https://www.youtube.com/channel/UC11DKpZ9mdjdb5fbdb7ulRw',
+    soundcloudUrl: 'https://soundcloud.com/abyusif-scmusic'
+  },
+  'ابيوسف': {
+    name: 'Abyusif',
+    youtubeUrl: 'https://www.youtube.com/channel/UC11DKpZ9mdjdb5fbdb7ulRw',
+    soundcloudUrl: 'https://soundcloud.com/abyusif-scmusic'
+  },
+  'أبيوسف': {
+    name: 'Abyusif',
+    youtubeUrl: 'https://www.youtube.com/channel/UC11DKpZ9mdjdb5fbdb7ulRw',
+    soundcloudUrl: 'https://soundcloud.com/abyusif-scmusic'
+  }
+};
+
 // Helper: Search YouTube & SoundCloud via fast primary query execution
 async function searchMediaOptions(query, limit = 8) {
+  const cleanQueryKey = query.trim().toLowerCase();
+  const officialMatch = OFFICIAL_ARTISTS[cleanQueryKey];
   const queryVariants = generateQueryVariants(query);
-  const primaryQuery = queryVariants[0] || query;
+  const primaryQuery = officialMatch ? `${officialMatch.name} songs` : (queryVariants[0] || query);
 
   // 1. Try primary query on YouTube immediately (Fast Path)
   console.log(`Searching YouTube for: "${primaryQuery}"`);
