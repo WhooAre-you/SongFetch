@@ -256,6 +256,7 @@ async function searchMediaOptions(query, limit = 8) {
   console.log(`Searching YouTube for: "${primaryQuery}"`);
   try {
     const args = getYtDlpArgs([
+      '--flat-playlist',
       '-J',
       `ytsearch${limit}:${primaryQuery}`
     ]);
@@ -281,6 +282,7 @@ async function searchMediaOptions(query, limit = 8) {
     console.log(`Searching YouTube for secondary variant: "${secondaryQuery}"`);
     try {
       const args = getYtDlpArgs([
+        '--flat-playlist',
         '-J',
         `ytsearch${limit}:${secondaryQuery}`
       ]);
@@ -306,6 +308,7 @@ async function searchMediaOptions(query, limit = 8) {
   try {
     const args = [
       '--no-cache-dir',
+      '--flat-playlist',
       '-J',
       `scsearch${limit}:${primaryQuery}`
     ];
