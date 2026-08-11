@@ -301,7 +301,7 @@ const OFFICIAL_ARTISTS = {
 };
 
 // Helper: Search YouTube & SoundCloud via fast primary query execution
-async function searchMediaOptions(query, limit = 8) {
+async function searchMediaOptions(query, limit = 50) {
   const cleanQueryKey = query.trim().toLowerCase();
   const officialMatch = OFFICIAL_ARTISTS[cleanQueryKey];
   const queryVariants = generateQueryVariants(query);
@@ -486,7 +486,7 @@ router.post('/api/search', async (req, res) => {
           metadata = options[0];
         }
       } else {
-        const options = await searchMediaOptions(queryOrUrl, 8);
+        const options = await searchMediaOptions(queryOrUrl, 50);
         if (!options || options.length === 0) {
           return res.status(404).json({ error: 'No songs found matching your search.' });
         }
