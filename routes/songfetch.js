@@ -248,79 +248,7 @@ async function resolveSoundCloudTrack(url) {
   }
 }
 
-// Scrape Lyrics from Genius.com
-async function scrapeGeniusLyrics(title, artist) {
-  const query = `${artist} ${title}`;
-  console.log(`Searching Genius lyrics for query: "${query}"`);
-  const searchUrl = `https://genius.com/api/search/multi?q=${encodeURIComponent(query)}`;
 
-  try {
-    const response = await axios.get(searchUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-
-    const sections = response.data.response.sections;
-    const songSection = sections.find(s => s.type === 'song');
-    if (!songSection || !songSection.hits || songSection.hits.length === 0) {
-      console.log('No Genius song matches found.');
-      return 'Lyrics not found.';
-    }
-
-    let targetHit = songSection.hits.find(hit => {
-      const hitTitle = (hit.result.title || '').toLowerCase();
-      const hitArtist = (hit.result.primary_artist ? hit.result.primary_artist.name : '').toLowerCase();
-      const hitUrl = (hit.result.url || '').toLowerCase();
-      
-      const isTranslation = hitTitle.includes('translation') || 
-                            hitTitle.includes('translated') || 
-                            hitArtist.includes('translation') || 
-                            hitArtist.includes('translator') ||
-                            hitUrl.includes('translation') ||
-                            hitUrl.includes('translated');
-      return !isTranslation;
-    });
-
-    if (!targetHit) {
-      targetHit = songSection.hits[0];
-    }
-
-    const songUrl = targetHit.result.url;
-    console.log(`Fetching Genius lyrics from page: ${songUrl}`);
-
-    const pageResponse = await axios.get(songUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      }
-    });
-
-    const $ = cheerio.load(pageResponse.data);
-    const containers = $('div[data-lyrics-container="true"]');
-
-    if (containers.length === 0) {
-      const oldLyrics = $('.lyrics');
-      if (oldLyrics.length > 0) {
-        oldLyrics.find('br').replaceWith('\n');
-        return oldLyrics.text().trim();
-      }
-      return 'Lyrics container not found on Genius.';
-    }
-
-    let lyrics = '';
-    containers.each((i, el) => {
-      const $el = $(el).clone();
-      $el.find('[data-exclude-from-selection="true"]').remove();
-      $el.find('br').replaceWith('\n');
-      lyrics += $el.text().trim() + '\n\n';
-    });
-
-    return lyrics.trim();
-  } catch (error) {
-    console.error('Genius lyrics scraper failed:', error.message);
-    return 'Lyrics failed to download.';
-  }
-}
 
 // Helper: Extract multiple entry results from yt-dlp JSON search response
 function extractEntriesFromYtDlp(data, albumLabel) {
@@ -555,7 +483,7 @@ router.post('/api/search', async (req, res) => {
 
 // Route: Download & Embed Metadata
 router.post('/api/download', async (req, res) => {
-  const { title, artist, album, artwork, lyrics, youtubeUrl } = req.body;
+  const { title, artist, album, artwork, youtubeUrl } = req.body;
 
   if (!title || !artist) {
     return res.status(400).json({ error: 'Title and artist are required' });
