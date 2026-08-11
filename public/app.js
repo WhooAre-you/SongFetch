@@ -435,7 +435,27 @@ document.addEventListener('DOMContentLoaded', () => {
     async function previewPlaylistTrack(track, rowEl) {
         // Highlight selected row
         document.querySelectorAll('.playlist-track-row').forEach(r => r.classList.remove('selected'));
-        rowEl.classList.add('selected');
+        if (rowEl) rowEl.classList.add('selected');
+
+        // If track already has full details, display instantly
+        if (track && track.title && track.artist && (track.artwork || track.youtubeUrl)) {
+            currentSongData = track;
+            coverArt.src = track.artwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80';
+            coverArt.onerror = () => { coverArt.src = 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80'; };
+            songTitle.textContent = track.title;
+            songArtist.textContent = track.artist;
+            songAlbum.textContent = track.album || 'Single';
+
+            downloadBtn.disabled = false;
+            downloadProgress.classList.add('hidden');
+            resultSection.classList.remove('hidden');
+            loader.classList.add('hidden');
+
+            fetchAndDisplaySongSize(currentSongData);
+            initPlayerBar(currentSongData);
+            resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            return;
+        }
 
         // Show loader
         loader.classList.remove('hidden');
@@ -470,7 +490,6 @@ document.addEventListener('DOMContentLoaded', () => {
             songArtist.textContent = data.artist;
             songAlbum.textContent = data.album || 'Single';
 
-
             // Reset download button
             downloadBtn.disabled = false;
             downloadBtn.innerHTML = `
@@ -494,7 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
             loader.classList.add('hidden');
             errorCard.classList.remove('hidden');
             errorMessage.textContent = error.message;
-            rowEl.classList.remove('selected');
+            if (rowEl) rowEl.classList.remove('selected');
         }
     }
 
