@@ -250,71 +250,113 @@ body {
     to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
-/* Quick Search Pills */
+/* Spotify-Style Artist Profile Cards */
 .quick-search-container {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 0.75rem;
-    margin-top: 1rem;
-    flex-wrap: wrap;
+    margin-top: 1.5rem;
 }
 
 .quick-search-label {
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 0.82rem;
+    font-weight: 700;
     color: var(--color-text-muted);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.08em;
 }
 
-.quick-pills {
+.spotify-artist-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(125px, 1fr));
+    gap: 0.85rem;
+}
+
+.spotify-artist-card {
     display: flex;
-    gap: 0.75rem;
-    flex-wrap: wrap;
+    flex-direction: column;
     align-items: center;
-}
-
-.quick-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.65rem;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 999px;
-    padding: 0.4rem 1.1rem 0.4rem 0.4rem;
-    color: var(--color-text);
-    font-family: var(--font-secondary);
-    font-size: 0.92rem;
-    font-weight: 600;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: var(--radius-md);
+    padding: 1rem 0.75rem 0.85rem;
     cursor: pointer;
-    transition: var(--transition-smooth);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
 }
 
-.pill-avatar {
-    width: 44px;
-    height: 44px;
+.spotify-avatar-wrapper {
+    position: relative;
+    width: 86px;
+    height: 86px;
+    margin-bottom: 0.75rem;
+}
+
+.spotify-avatar-img {
+    width: 100%;
+    height: 100%;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid rgba(139, 92, 246, 0.5);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-    transition: transform 0.25s ease, border-color 0.25s ease;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.quick-pill:hover {
-    background: rgba(139, 92, 246, 0.22);
-    border-color: rgba(139, 92, 246, 0.6);
-    color: #ffffff;
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(139, 92, 246, 0.3);
+.spotify-play-btn {
+    position: absolute;
+    bottom: 2px;
+    right: 2px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--color-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.6);
 }
 
-.quick-pill:hover .pill-avatar {
-    transform: scale(1.08);
-    border-color: #a78bfa;
+.spotify-artist-card:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(139, 92, 246, 0.4);
+    transform: translateY(-4px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
 }
 
-.quick-pill:active {
+.spotify-artist-card:hover .spotify-avatar-img {
+    transform: scale(1.05);
+}
+
+.spotify-artist-card:hover .spotify-play-btn {
+    opacity: 1;
     transform: translateY(0);
+}
+
+.spotify-artist-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    width: 100%;
+}
+
+.spotify-artist-name {
+    font-family: var(--font-secondary);
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.spotify-artist-tag {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--color-text-muted);
 }
 
 /* Glassmorphism Card */
