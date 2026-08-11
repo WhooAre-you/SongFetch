@@ -126,7 +126,8 @@ function getCookiesPath() {
 function getYtDlpArgs(customArgs = []) {
   const baseArgs = [
     '--no-cache-dir',
-    '--extractor-args', 'youtube:player_client=mweb,android,ios,web_creator,tv_embedded'
+    '--js-runtimes', 'node',
+    '--extractor-args', 'youtube:player_client=web,mweb,android'
   ];
 
   const cookiesFile = getCookiesPath();
