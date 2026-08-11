@@ -20,11 +20,28 @@ async function ensureYtDlp() {
   if (!fs.existsSync(binDir)) {
     fs.mkdirSync(binDir, { recursive: true });
   }
+
+  const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+  let needsDownload = true;
+
   if (fs.existsSync(ytDlpPath)) {
+    try {
+      const stats = fs.statSync(ytDlpPath);
+      const isRecent = (Date.now() - stats.mtimeMs) < ONE_DAY_MS;
+      const isValidSize = stats.size > 1000000; // > 1MB
+      if (isRecent && isValidSize) {
+        needsDownload = false;
+      }
+    } catch (e) {
+      needsDownload = true;
+    }
+  }
+
+  if (!needsDownload) {
     return ytDlpPath;
   }
   
-  console.log('yt-dlp not found. Downloading latest binary...');
+  console.log('Downloading latest yt-dlp binary...');
   let url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
   if (isWindows) {
     url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe';
@@ -39,24 +56,37 @@ async function ensureYtDlp() {
       responseType: 'stream'
     });
 
-    const writer = fs.createWriteStream(ytDlpPath);
+    const tempBinaryPath = `${ytDlpPath}.tmp`;
+    const writer = fs.createWriteStream(tempBinaryPath);
     response.data.pipe(writer);
 
     return new Promise((resolve, reject) => {
       writer.on('finish', () => {
-        if (!isWindows) {
-          fs.chmodSync(ytDlpPath, 0o755);
+        try {
+          if (!isWindows) {
+            fs.chmodSync(tempBinaryPath, 0o755);
+          }
+          if (fs.existsSync(ytDlpPath)) {
+            fs.unlinkSync(ytDlpPath);
+          }
+          fs.renameSync(tempBinaryPath, ytDlpPath);
+          console.log(`yt-dlp downloaded and updated at: ${ytDlpPath}`);
+          resolve(ytDlpPath);
+        } catch (err) {
+          console.error('Error replacing yt-dlp binary:', err);
+          if (fs.existsSync(ytDlpPath)) resolve(ytDlpPath);
+          else reject(err);
         }
-        console.log(`yt-dlp downloaded and saved to: ${ytDlpPath}`);
-        resolve(ytDlpPath);
       });
       writer.on('error', (err) => {
         console.error('Error writing yt-dlp file:', err);
-        reject(err);
+        if (fs.existsSync(ytDlpPath)) resolve(ytDlpPath);
+        else reject(err);
       });
     });
   } catch (err) {
     console.error('Failed to download yt-dlp:', err.message);
+    if (fs.existsSync(ytDlpPath)) return ytDlpPath;
     throw err;
   }
 }
