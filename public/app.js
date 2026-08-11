@@ -272,6 +272,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     await downloadAllPlaylistTracks(data.tracks);
                 };
             } else if (data.isOptionsList) {
+                // Update results count badge
+                const count = data.options ? data.options.length : 0;
+                const resultsBadge = document.getElementById('search-results-badge');
+                if (resultsBadge) {
+                    resultsBadge.textContent = `${count} result${count === 1 ? '' : 's'} available`;
+                }
+
                 // Populate Search Options list for verification
                 searchOptionsList.innerHTML = '';
                 data.options.forEach((track, index) => {

@@ -359,6 +359,17 @@ body {
     color: var(--color-text-muted);
 }
 
+.search-results-badge {
+    background: rgba(139, 92, 246, 0.18);
+    border: 1px solid rgba(139, 92, 246, 0.4);
+    color: var(--color-primary-light);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    margin-left: auto;
+}
+
 /* Glassmorphism Card */
 .main-card {
     background: var(--color-card-bg);
