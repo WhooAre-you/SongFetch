@@ -331,6 +331,64 @@ async function searchMediaOptions(query, limit = 8) {
   return [];
 }
 
+// Helper: Search for full Album or Playlist when query contains album/artist keywords or when selected
+async function searchAlbumOrPlaylist(query) {
+  try {
+    const isExplicitAlbum = /\b(album|playlist|discography|كامل|البوم)\b/i.test(query);
+    const searchTarget = isExplicitAlbum ? query : `${query} full album`;
+
+    console.log(`Checking for full album/playlist: "${searchTarget}"`);
+    const args = getYtDlpArgs([
+      '--flat-playlist',
+      '-J',
+      `ytsearch1:${searchTarget}`
+    ]);
+    const ytDlpBinary = await ensureYtDlp();
+    const jsonStr = await new Promise((resolve, reject) => {
+      execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+        if (error) reject(new Error(stderr || error.message));
+        else resolve(stdout);
+      });
+    });
+    const data = JSON.parse(jsonStr);
+
+    let playlistEntry = null;
+    if (data.entries && data.entries.length > 0) {
+      playlistEntry = data.entries[0];
+    } else if (data._type === 'playlist') {
+      playlistEntry = data;
+    }
+
+    if (playlistEntry && (playlistEntry._type === 'playlist' || playlistEntry.entries) && playlistEntry.entries && playlistEntry.entries.length > 1) {
+      const title = playlistEntry.title || `${query} Album`;
+      const curator = playlistEntry.uploader || playlistEntry.channel || query;
+      let artwork = '';
+      if (playlistEntry.thumbnails && playlistEntry.thumbnails.length > 0) {
+        artwork = playlistEntry.thumbnails[playlistEntry.thumbnails.length - 1].url;
+      }
+
+      const tracks = playlistEntry.entries.map((entry, idx) => ({
+        title: entry.title || `Track ${idx + 1}`,
+        artist: entry.uploader || entry.channel || curator,
+        album: title,
+        artwork: (entry.thumbnails && entry.thumbnails.length > 0) ? entry.thumbnails[entry.thumbnails.length - 1].url : artwork,
+        youtubeUrl: entry.id ? `https://www.youtube.com/watch?v=${entry.id}` : (entry.url || '')
+      }));
+
+      return {
+        isPlaylist: true,
+        title,
+        artist: curator,
+        artwork,
+        tracks
+      };
+    }
+  } catch (err) {
+    console.warn('Album/playlist search check skipped:', err.message);
+  }
+  return null;
+}
+
 // Route: Search / Resolve Link
 router.post('/api/search', async (req, res) => {
   const { queryOrUrl, resolveDirect } = req.body;
@@ -363,6 +421,14 @@ router.post('/api/search', async (req, res) => {
         return res.status(400).json({ error: 'Unsupported URL platform. Use Spotify, YouTube, or SoundCloud.' });
       }
     } else {
+      // Check if user is searching specifically for an album or playlist
+      if (/\b(album|playlist|discography|كامل|البوم)\b/i.test(queryOrUrl)) {
+        const albumData = await searchAlbumOrPlaylist(queryOrUrl);
+        if (albumData) {
+          return res.json(albumData);
+        }
+      }
+
       if (resolveDirect) {
         const options = await searchMediaOptions(queryOrUrl, 1);
         if (options && options.length > 0) {
