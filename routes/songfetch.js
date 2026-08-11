@@ -397,8 +397,7 @@ router.post('/api/search', async (req, res) => {
           console.log(`Query "${queryOrUrl}" not found on iTunes for direct lookup. Trying YouTube search fallback...`);
           try {
             const args = [
-              '--js-runtimes', 'node',
-              '--impersonate', 'chrome',
+              '--extractor-args', 'youtube:player_client=mweb,android',
               '--no-cache-dir',
               '-J',
               `ytsearch1:${queryOrUrl}`
@@ -495,8 +494,7 @@ router.post('/api/search', async (req, res) => {
           console.log(`Query "${queryOrUrl}" not found on iTunes. Trying YouTube search fallback...`);
           try {
             const args = [
-              '--js-runtimes', 'node',
-              '--impersonate', 'chrome',
+              '--extractor-args', 'youtube:player_client=mweb,android',
               '--no-cache-dir',
               '-J',
               `ytsearch8:${queryOrUrl}`
@@ -587,8 +585,7 @@ router.post('/api/download', async (req, res) => {
     console.log(`Starting audio download using yt-dlp for: ${downloadUrl}`);
     
     const args = [
-      '--js-runtimes', 'node',
-      '--impersonate', 'chrome',
+      '--extractor-args', 'youtube:player_client=mweb,android',
       '--no-cache-dir',
       '-x',
       '--audio-format', 'mp3',
@@ -694,8 +691,7 @@ router.post('/api/songfetch/size', async (req, res) => {
   try {
     const ytDlpBinary = await ensureYtDlp();
     const args = [
-      '--js-runtimes', 'node',
-      '--impersonate', 'chrome',
+      '--extractor-args', 'youtube:player_client=mweb,android',
       '--no-cache-dir',
       '-J',
       '--no-playlist',
@@ -756,8 +752,7 @@ router.get('/api/songfetch/stream', async (req, res) => {
     console.log(`Starting audio stream using yt-dlp to stdout for: ${streamUrl}`);
 
     const ytdlpArgs = [
-      '--js-runtimes', 'node',
-      '--impersonate', 'chrome',
+      '--extractor-args', 'youtube:player_client=mweb,android',
       '--no-cache-dir',
       '-f', 'bestaudio',
       '-o', '-',

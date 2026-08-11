@@ -38,8 +38,7 @@ async function resolveYouTubePlaylist(url) {
     if (!playlistId) throw new Error('Invalid YouTube playlist URL');
 
     const args = [
-      '--js-runtimes', 'node',
-      '--impersonate', 'chrome',
+      '--extractor-args', 'youtube:player_client=mweb,android',
       '--no-cache-dir',
       '--flat-playlist',
       '-J',
