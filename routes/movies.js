@@ -2,91 +2,10 @@ const express = require('express');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
-const arabicResolver = require('../arabicMediaResolver');
-const { handleWeFeedSeriesInfo } = require('./series');
 
 const router = express.Router();
 
-// Helper: Get cached or fresh WeFeed guest session token
-let cachedWeFeedToken = null;
-let weFeedTokenExpiry = 0;
 
-async function getWeFeedToken() {
-  const now = Math.floor(Date.now() / 1000);
-  if (cachedWeFeedToken && weFeedTokenExpiry > now + 3600) {
-    return cachedWeFeedToken;
-  }
-  
-  console.log('Fetching new WeFeed guest token...');
-  const res = await axios.get('https://api.seocloud.biz/wefeed-seo-bff/vip/sku-list', {
-    headers: {
-      'Accept': 'application/json',
-      'x-request-lang': 'en',
-      'X-Client-Info': JSON.stringify({ timezone: 'Africa/Cairo' }),
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      'Origin': 'https://videodownloader.site',
-      'Referer': 'https://videodownloader.site/'
-    }
-  });
-  
-  const xUserStr = res.headers['x-user'];
-  if (!xUserStr) throw new Error('x-user header missing in token response');
-  const xUserData = JSON.parse(xUserStr);
-  cachedWeFeedToken = xUserData.token;
-  
-  try {
-    const payload = JSON.parse(Buffer.from(cachedWeFeedToken.split('.')[1], 'base64').toString('utf8'));
-    weFeedTokenExpiry = payload.exp || (now + 86400);
-  } catch (e) {
-    weFeedTokenExpiry = now + 86400;
-  }
-  return cachedWeFeedToken;
-}
-
-// Route: MovieFetch search via WeFeed API
-router.get('/api/movies/search', async (req, res) => {
-  const { q } = req.query;
-  if (!q) {
-    return res.status(400).json({ error: 'Query parameter "q" is required' });
-  }
-
-  try {
-    const token = await getWeFeedToken();
-    const searchRes = await axios.post('https://h5-api.aoneroom.com/wefeed-h5api-bff/subject/search', {
-      keyword: q,
-      page: 1,
-      perPage: 30
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'X-Source': 'downloader',
-        'X-Site-Domain': 'videodownloader.site',
-        'Authorization': `Bearer ${token}`,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Origin': 'https://videodownloader.site',
-        'Referer': 'https://videodownloader.site/'
-      }
-    });
-
-    const items = searchRes.data?.data?.items || [];
-    const results = items.map(item => {
-      const prefix = item.subjectType === 2 ? 'series' : 'movie';
-      const link = `https://wefeed.site/${prefix}?id=${item.subjectId}&path=${item.detailPath}&title=${encodeURIComponent(item.title)}`;
-      return {
-        title: item.title,
-        link,
-        img: item.cover?.url || '',
-        source: 'WeFeed'
-      };
-    });
-
-    res.json({ results });
-  } catch (err) {
-    console.error('WeFeed search failed:', err.message);
-    res.status(500).json({ error: `Search failed: ${err.message}` });
-  }
-});
 
 // Route: Resolve IMDB ID for VidSrc integration
 router.post('/api/movies/imdb', async (req, res) => {
@@ -113,101 +32,48 @@ router.post('/api/movies/imdb', async (req, res) => {
     res.status(404).json({ error: 'IMDB ID not found for the given title.' });
   } catch (err) {
     console.error('IMDB resolution failed:', err.message);
-    res.status(500).json({ error: 'IMDB resolution failed' });
+    res.status(500).json({ error: 'Failed to resolve IMDB ID.' });
   }
 });
 
-// Route: MovieFetch watch page details scraping (episodes or download options)
-router.post('/api/movies/info', async (req, res) => {
-  const { url } = req.body;
-  if (!url) {
-    return res.status(400).json({ error: 'URL is required' });
-  }
-
+// Route: Search IMDb Suggestions for English Titles (replaces WeFeed search!)
+router.get('/api/movies/imdb-search', async (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.status(400).json({ error: 'Query is required' });
+  
   try {
-    const urlObj = new URL(url);
-    const params = new URLSearchParams(urlObj.search);
-    const id = params.get('id');
-    const pathVal = params.get('path');
-    const title = params.get('title') || 'Media';
+    const query = encodeURIComponent(q.toLowerCase());
+    const url = `https://v3.sg.media-imdb.com/suggestion/x/${query}.json`;
     
-    const isSeries = urlObj.pathname.includes('/series');
-    const isDownload = urlObj.pathname.includes('/download');
-    
-    const token = await getWeFeedToken();
-    
-    // Delegate to TV Series handler if TV series root
-    if (isSeries) {
-      return handleWeFeedSeriesInfo(req, res, id, pathVal, title, token);
-    }
-    
-    // If it's a Movie or an Episode Download, fetch quality options
-    let se = 0;
-    let ep = 0;
-    
-    if (isDownload) {
-      se = parseInt(params.get('se') || '0', 10);
-      ep = parseInt(params.get('ep') || '0', 10);
-    }
-    
-    console.log(`Fetching WeFeed download resources for subjectId: ${id}, se: ${se}, ep: ${ep}`);
-    const dlRes = await axios.get(`https://h5-api.aoneroom.com/wefeed-h5api-bff/subject/download?subjectId=${id}&se=${se}&ep=${ep}&detailPath=${encodeURIComponent(pathVal)}`, {
-      headers: {
-        'Accept': 'application/json',
-        'x-request-lang': 'en',
-        'X-Client-Info': JSON.stringify({ timezone: 'Africa/Cairo' }),
-        'X-Source': 'downloader',
-        'X-Site-Domain': 'videodownloader.site',
-        'Authorization': `Bearer ${token}`,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Origin': 'https://videodownloader.site',
-        'Referer': 'https://videodownloader.site/'
-      }
+    const imdbRes = await axios.get(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
     });
     
-    const dlData = dlRes.data?.data || {};
-    const wefeedDownloads = dlData.downloads || [];
-    const wefeedCaptions = dlData.captions || [];
-    
-    const subtitles = wefeedCaptions
-      .filter(cap => cap.lan === 'ar' || cap.lan === 'en' || cap.lanName?.toLowerCase().includes('arabic') || cap.lanName?.toLowerCase().includes('english'))
-      .map(cap => ({
-        lan: cap.lan === 'ar' ? 'ar' : 'en',
-        url: cap.url
-      }));
-      
-    const downloads = wefeedDownloads.map(dl => {
-      let sizeStr = 'Unknown size';
-      if (dl.size) {
-        const sizeBytes = parseInt(dl.size, 10);
-        if (sizeBytes > 1024 * 1024 * 1024) {
-          sizeStr = `${(sizeBytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
-        } else if (sizeBytes > 1024 * 1024) {
-          sizeStr = `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-        } else {
-          sizeStr = `${(sizeBytes / 1024).toFixed(1)} KB`;
-        }
-      }
-      
-      const compositeLink = JSON.stringify({
-        videoUrl: dl.url,
-        captions: subtitles
+    const items = imdbRes.data?.d || [];
+    const results = items
+      .filter(item => item.id && item.id.startsWith('tt') && (item.qid === 'movie' || item.qid === 'tvSeries' || item.qid === 'tvMiniSeries'))
+      .map(item => {
+        const isSeries = item.qid === 'tvSeries' || item.qid === 'tvMiniSeries';
+        return {
+          title: item.l,
+          link: item.id,
+          imdbId: item.id,
+          img: item.i?.imageUrl || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80',
+          source: 'vidsrc',
+          sourceName: 'English (VidSrc)',
+          isArabic: false,
+          isSeries
+        };
       });
       
-      return {
-        quality: `${dl.resolution}p (${dl.codecName || 'h264'})`,
-        size: sizeStr,
-        link: compositeLink,
-        host: 'WeFeed CDN'
-      };
-    });
-    
-    return res.json({ type: 'movie', downloads });
+    res.json({ results });
   } catch (err) {
-    console.error('WeFeed info resolution failed:', err.message);
-    res.status(500).json({ error: `Details resolution failed: ${err.message}` });
+    console.error('IMDb search failed:', err.message);
+    res.status(500).json({ error: 'Failed to query IMDb suggestions' });
   }
 });
+
+
 
 // Route: Direct Movie Stream GET Endpoint
 router.get('/api/movies/stream', async (req, res) => {
@@ -223,7 +89,6 @@ router.get('/api/movies/stream', async (req, res) => {
       if (parsed && parsed.videoUrl) actualVideoUrl = parsed.videoUrl;
     } catch (e) {}
 
-    actualVideoUrl = await arabicResolver.resolveDirectHosterMediaUrl(actualVideoUrl);
     console.log(`[Server] Stream resolved direct media URL: ${actualVideoUrl}`);
 
     const downloadResponse = await axios({
@@ -283,8 +148,7 @@ router.post('/api/movies/download', async (req, res) => {
       if (parsed.videoUrl) actualVideoUrl = parsed.videoUrl;
     } catch (e) {}
 
-    actualVideoUrl = await arabicResolver.resolveDirectHosterMediaUrl(actualVideoUrl);
-    console.log(`[Server] Resolved direct media stream URL: ${actualVideoUrl}`);
+    console.log(`[Server] Downloading media URL: ${actualVideoUrl}`);
 
     const downloadResponse = await axios({
       url: actualVideoUrl,
@@ -401,6 +265,41 @@ router.post('/api/subtitles/download', async (req, res) => {
     console.error('Subtitle download failed:', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'Failed to download subtitle' });
   }
+});
+
+// Route: Curated list of Live IPTV channels (simulating Ostora TV App live streaming)
+router.get('/api/ostora/channels', (req, res) => {
+  const channels = [
+    {
+      name: "beIN Sports HD1 (بث مباشر مباريات اليوم)",
+      category: "Sports",
+      url: "https://tglive.beinsports.com/stream.m3u8",
+      isEmbed: true,
+      embedUrl: "https://www.youtube.com/embed/live_stream?channel=UC5gS8J_X2S_mD5P1sP-JtZw"
+    },
+    {
+      name: "Al Jazeera Live (قناة الجزيرة مباشر)",
+      category: "News",
+      url: "https://live-am.aljazeera.net/AJ/index.m3u8",
+      isEmbed: true,
+      embedUrl: "https://www.youtube.com/embed/live_stream?channel=UCOgFi4fMEGPuaKy56LNnigg"
+    },
+    {
+      name: "Al Arabiya News (قناة العربية بث مباشر)",
+      category: "News",
+      url: "https://alarabiya.live/stream.m3u8",
+      isEmbed: true,
+      embedUrl: "https://www.youtube.com/embed/live_stream?channel=UC4S3a8Gatp8XUdeecn1fCqw"
+    },
+    {
+      name: "Rotana Cinema (قناة روتانا سينما بث مباشر)",
+      category: "Entertainment",
+      url: "https://rotana-cinema-live.com/stream.m3u8",
+      isEmbed: true,
+      embedUrl: "https://www.youtube.com/embed/live_stream?channel=UCCj9gV1n4gP8gJ1e991J9Lw"
+    }
+  ];
+  res.json({ channels });
 });
 
 module.exports = router;

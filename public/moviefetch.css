@@ -822,3 +822,107 @@
     border-radius: 4px;
     backdrop-filter: blur(4px);
 }
+
+/* Source Filter Pills */
+.source-tab {
+    background: rgba(255, 255, 255, 0.04);
+    border: 2px solid rgba(255, 255, 255, 0.12);
+    color: var(--color-text-muted);
+    padding: 0.75rem 1.5rem;
+    border-radius: 99px;
+    font-family: var(--font-secondary);
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    user-select: none;
+    margin: 4px;
+}
+.source-tab:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.3);
+}
+.source-tab.active {
+    background: rgba(239, 68, 68, 0.25);
+    color: #fff;
+    border-color: #ef4444;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+}
+
+/* Season Cards Netflix-style Layout */
+.seasons-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 16px;
+    margin-bottom: 2rem;
+}
+.season-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+}
+.season-card:hover {
+    transform: translateY(-4px) scale(1.02);
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.season-card.active {
+    border-color: #ef4444;
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.2);
+    background: rgba(239, 68, 68, 0.04);
+}
+.season-card img {
+    width: 100%;
+    aspect-ratio: 2/3;
+    object-fit: cover;
+    display: block;
+    transition: transform 0.3s ease;
+}
+.season-card:hover img {
+    transform: scale(1.05);
+}
+.season-card-info {
+    padding: 8px 10px;
+    text-align: center;
+}
+.season-card-info h5 {
+    margin: 0;
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: var(--font-secondary);
+}
+
+/* Theater Mode Styles */
+.theater-mode-active #video-player-wrapper {
+    max-width: 100% !important;
+    width: 100% !important;
+    aspect-ratio: 21/9 !important;
+    height: 60vh !important;
+}
+
+/* Dim Overlay for Lights Out */
+.lights-out-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.9);
+    z-index: 998;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+.lights-out-active .lights-out-overlay {
+    display: block;
+    pointer-events: auto;
+}
+.lights-out-active #player-area {
+    position: relative;
+    z-index: 999;
+    box-shadow: 0 20px 80px rgba(0,0,0,0.8);
+}
+

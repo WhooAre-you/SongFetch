@@ -65,6 +65,12 @@ async function ensureYtDlp() {
     return new Promise((resolve, reject) => {
       writer.on('finish', () => {
         try {
+          // Verify downloaded size before replacing
+          const tempStats = fs.statSync(tempBinaryPath);
+          if (tempStats.size < 1000000) {
+            throw new Error(`Downloaded yt-dlp binary is suspiciously small (${tempStats.size} bytes). Aborting update.`);
+          }
+
           if (!isWindows) {
             fs.chmodSync(tempBinaryPath, 0o755);
           }
@@ -75,7 +81,7 @@ async function ensureYtDlp() {
           console.log(`yt-dlp downloaded and updated at: ${ytDlpPath}`);
           resolve(ytDlpPath);
         } catch (err) {
-          console.error('Error replacing yt-dlp binary:', err);
+          console.error('Error replacing yt-dlp binary:', err.message);
           if (fs.existsSync(ytDlpPath)) resolve(ytDlpPath);
           else reject(err);
         }

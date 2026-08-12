@@ -116,17 +116,29 @@
                     </button>
                 </form>
 
-                <!-- Interactive Search Filters -->
-                <div class="search-filter-tabs">
-                    <button type="button" class="filter-tab active" data-filter="all">
-                        <span class="dot" style="background-color: #eab308;"></span>All Results
-                    </button>
-                    <button type="button" class="filter-tab" data-filter="movie">
-                        <span class="dot" style="background-color: #22c55e;"></span>Movies Only
-                    </button>
-                    <button type="button" class="filter-tab" data-filter="series">
-                        <span class="dot" style="background-color: #3b82f6;"></span>TV Series Only
-                    </button>
+                <!-- Interactive Search Filters & Source Selection (Visible on load) -->
+                <div id="filters-container" style="margin-top: 1.5rem;">
+                    <!-- Interactive Search Filters -->
+                    <div id="search-type-filters" class="search-filter-tabs hidden">
+                        <button type="button" class="filter-tab active" data-filter="all">
+                            <span class="dot" style="background-color: #eab308;"></span>All Results
+                        </button>
+                        <button type="button" class="filter-tab" data-filter="movie">
+                            <span class="dot" style="background-color: #22c55e;"></span>Movies Only
+                        </button>
+                        <button type="button" class="filter-tab" data-filter="series">
+                            <span class="dot" style="background-color: #3b82f6;"></span>TV Series Only
+                        </button>
+                    </div>
+
+                    <!-- Streaming Sources Selector -->
+                    <div class="source-filter-container" style="margin-top: 1.5rem;">
+                        <label style="display: block; margin-bottom: 0.75rem; color: #9ca3af; font-family: 'Outfit', sans-serif; font-size: 0.85rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">Choose Streaming Source / اختر المصدر</label>
+                        <div class="source-filter-tabs" id="source-filter-tabs">
+                            <button type="button" class="source-tab active" data-source="all">🌐 All Sources</button>
+                            <button type="button" class="source-tab" data-source="vidsrc">🇬🇧 English (VidSrc)</button>
+                        </div>
+                    </div>
                 </div>
             </section>
 
@@ -139,8 +151,8 @@
                 <p id="loader-text">Searching cinema archives...</p>
             </section>
 
-            <!-- Trending Section -->
-            <section id="trending-section" class="trending-section">
+            <!-- Trending Section (Hidden on load, shown as search results) -->
+            <section id="trending-section" class="trending-section hidden">
                 <h3 class="section-title">Trending Discoveries</h3>
                 <div class="trending-grid" id="trending-grid">
                     <!-- Loaded dynamically via javascript -->
@@ -171,102 +183,65 @@
                         <p id="movie-plot" class="movie-plot-text">
                             A thief who steals corporate secrets through the use of dream-sharing technology is given the inverse task of planting an idea into the mind of a C.E.O.
                         </p>
-                        
-                        <!-- Actions -->
-                        <div class="movie-actions">
-                            <a href="#download-section" class="watch-btn">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                    <polyline points="7 10 12 15 17 10"></polyline>
-                                    <line x1="12" y1="15" x2="12" y2="3"></line>
-                                </svg>
-                                <span>Configure Download</span>
-                            </a>
-                        </div>
+
                     </div>
                 </div>
 
                 <!-- TV Show Season / Episode Selection -->
-                <div id="tv-selector-container" class="tv-selector-container hidden">
-                    <div class="tv-select-row" style="grid-template-columns: 1fr;">
-                        <div class="tv-select-group" style="width: 100%; display: none;">
-                            <label for="season-select" class="selector-label">Season</label>
-                            <div class="select-wrapper">
-                                <select id="season-select">
-                                    <!-- Populated dynamically -->
-                                </select>
-                                <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg>
-                            </div>
+                <div id="tv-selector-container" class="tv-selector-container hidden" style="margin-top: 2rem;">
+                    <!-- Seasons Row -->
+                    <div class="seasons-section">
+                        <h4 class="section-subtitle" style="font-family: 'Outfit', sans-serif; color: #fff; margin-bottom: 1rem; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+                            <span>المواسم / Seasons</span>
+                            <span id="seasons-count-badge" style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-size: 0.8rem; padding: 2px 8px; border-radius: 9999px;">0</span>
+                        </h4>
+                        <div id="seasons-container" class="seasons-container">
+                            <!-- Season cards populated dynamically -->
                         </div>
-                        <div class="tv-select-group" style="width: 100%;">
-                            <label class="selector-label">Select Episode</label>
-                            <div id="episodes-grid" class="episodes-grid">
-                                <!-- Populated dynamically as Netflix-style buttons -->
-                            </div>
+                    </div>
+
+                    <!-- Episodes Grid -->
+                    <div class="episodes-section" style="margin-top: 1.5rem;">
+                        <h4 class="section-subtitle" style="font-family: 'Outfit', sans-serif; color: #fff; margin-bottom: 1rem; font-size: 1.1rem; display: flex; align-items: center; gap: 8px;">
+                            <span>الحلقات / Episodes</span>
+                            <span id="episodes-count-badge" style="background: rgba(234, 179, 8, 0.2); color: #eab308; font-size: 0.8rem; padding: 2px 8px; border-radius: 9999px;">0</span>
+                        </h4>
+                        <div id="episodes-grid" class="episodes-grid">
+                            <!-- Episode buttons populated dynamically -->
                         </div>
                     </div>
                 </div>
 
-                <!-- Cinema Download Area -->
-                <div id="player-area" class="player-area-container" style="margin-top: 2rem;">
-                    <div id="download-section">
-                        <h3 class="section-title">Configure Download</h3>
+                <!-- Cinema Streaming Player Area -->
+                <div id="player-area" class="player-area-container hidden" style="margin-top: 2.5rem;">
+                    <div class="player-header">
+                        <h3 class="section-title" id="player-title" style="margin: 0;">Select a source to start streaming</h3>
+                        <div class="player-controls-row">
+                            <button type="button" id="theater-mode-btn" class="control-btn">🎭 Theater Mode</button>
+                            <button type="button" id="lights-out-btn" class="control-btn">💡 Lights Out</button>
+                        </div>
+                    </div>
+
+                    <!-- Main Player Display -->
+                    <div id="video-player-wrapper" style="position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; margin-bottom: 1.5rem;">
+                        <!-- Embed streaming iframe -->
+                        <iframe id="player-iframe" src="" frameborder="0" allowfullscreen allow="autoplay; fullscreen" style="width: 100%; height: 100%; border: none;"></iframe>
+                        
+                        <!-- Native HTML5 player for direct stream links -->
+                        <video id="player-video" controls style="display: none; width: 100%; height: 100%; object-fit: contain; background: #000;">
+                            <!-- Tracks for subtitles loaded dynamically -->
+                        </video>
+                    </div>
+
+                    <!-- Server / Stream Source Selector -->
+                    <div class="server-selector-container">
+                        <h4 style="font-family: 'Outfit', sans-serif; color: #9ca3af; font-size: 0.9rem; margin-bottom: 0.75rem;">Select Server / Mirror (اختر مشغل البث)</h4>
+                        <div id="servers-list" style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <!-- Populated dynamically as mirror buttons -->
+                        </div>
                     </div>
                     
-                    <div class="download-config-panel">
-                        <div class="qualities-table-wrapper">
-                            <table class="qualities-table">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 80px; text-align: center;">Select</th>
-                                        <th>Resolution</th>
-                                        <th>Size</th>
-                                        <th>Hosting Server</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="qualities-list">
-                                    <!-- Populated dynamically -->
-                                </tbody>
-                            </table>
-                        </div>
-
-
-                        <div class="download-summary-box">
-                            <div class="summary-item">
-                                <span class="label">Target Title:</span>
-                                <span id="summary-title" class="value">-</span>
-                            </div>
-                            <div class="summary-item">
-                                <span class="label">Estimated File Size:</span>
-                                <span id="summary-size" class="value">-</span>
-                            </div>
-                        </div>
-
-                        <button id="download-now-btn" class="download-btn-cinema" disabled>
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                                <polyline points="7 10 12 15 17 10"></polyline>
-                                <line x1="12" y1="15" x2="12" y2="3"></line>
-                            </svg>
-                            <span>Start Building & Download MP4</span>
-                        </button>
-                    </div>
-
-                    <!-- Download Progress Container -->
-                    <div id="download-progress" class="download-progress-container hidden" style="margin-top: 1.5rem;">
-                        <div class="progress-info">
-                            <span id="progress-status">Downloading video streams from host...</span>
-                            <span id="progress-percent">0%</span>
-                        </div>
-                        <div class="progress-bar-container">
-                            <div id="progress-fill" class="progress-bar-fill"></div>
-                        </div>
-                        <p class="progress-note">Please do not close this tab. The backend is fetching subtitles and merging them with the video file using FFmpeg, which may take up to a minute.</p>
-                    </div>
-
-                    <p class="player-disclaimer">Note: We do not host any media files. Server download links are extracted dynamically from third-party indices. Subtitles are multiplexed into the video container as soft-coded tracks.</p>
+                    <p class="player-disclaimer" style="margin-top: 1.5rem;">Note: Streaming sources are loaded dynamically from index directories. Enable full-screen mode for the best movie streaming experience.</p>
                 </div>
             </section>
 
