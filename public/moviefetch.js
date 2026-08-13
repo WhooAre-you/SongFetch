@@ -630,11 +630,13 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (err) {}
 
             const idToUse = tmdbId || imdbId;
-            servers.push({
-                name: "🎬 English (VidSrc)",
-                url: `https://vidsrc.sbs/embed/movie/${idToUse}`,
-                type: 'iframe'
-            });
+            servers.push(
+                { name: "🎬 English (VidSrc.to)", url: `https://vidsrc.to/embed/movie/${idToUse}`, type: 'iframe' },
+                { name: "🎬 English (VidSrc.me)", url: `https://vidsrc.me/embed/movie?imdb=${idToUse}`, type: 'iframe' },
+                { name: "🎬 English (VidSrc.cc)", url: `https://vidsrc.cc/v2/embed/movie/${idToUse}`, type: 'iframe' },
+                { name: "🎬 English (Embed.su)", url: `https://embed.su/embed/movie/${idToUse}`, type: 'iframe' },
+                { name: "🎬 English (2Embed)", url: `https://2embed.cc/embed/${idToUse}`, type: 'iframe' }
+            );
         }
 
         renderServerButtons(servers);
@@ -667,13 +669,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (tmdbId || imdbId) {
             const idToUse = tmdbId || imdbId;
-            servers.push({
-                name: "🎬 English (VidSrc)",
-                url: `https://vidsrc.sbs/embed/tv/${idToUse}/${seasonNum}/${ep.number}`,
-                type: 'iframe'
-            });
+            servers.push(
+                { name: "🎬 English (VidSrc.to)", url: `https://vidsrc.to/embed/tv/${idToUse}/${seasonNum}/${ep.number}`, type: 'iframe' },
+                { name: "🎬 English (VidSrc.me)", url: `https://vidsrc.me/embed/tv?imdb=${idToUse}&season=${seasonNum}&episode=${ep.number}`, type: 'iframe' },
+                { name: "🎬 English (Embed.su)", url: `https://embed.su/embed/tv/${tmdbId || idToUse}/${seasonNum}/${ep.number}`, type: 'iframe' },
+                { name: "🎬 English (2Embed)", url: `https://2embed.cc/embed/${idToUse}/${seasonNum}/${ep.number}`, type: 'iframe' }
+            );
         }
-
 
         renderServerButtons(servers);
     }

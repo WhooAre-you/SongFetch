@@ -136,6 +136,37 @@ async function searchCimaLight(q) {
   }
 }
 
+// Helper Scraper: WeCima
+async function searchWeCima(q) {
+  try {
+    const searchUrl = `https://mycima.wecima.show/search/${encodeURIComponent(q)}`;
+    const res = await axios.get(searchUrl, { headers: COMMON_HEADERS, timeout: 7000 });
+    const $ = cheerio.load(res.data);
+    const results = [];
+
+    $('.GridItem, .Thumb--GridItem, a[href*="/film/"], a[href*="/movie/"], a[href*="/watch/"]').each((i, el) => {
+      const href = $(el).attr('href') || $(el).find('a').attr('href');
+      const title = $(el).find('.has-text, strong, .title, h2, h3').text().trim() || $(el).text().trim();
+      let img = $(el).find('.BG--GridItem').attr('data-bg') || $(el).find('img').attr('src') || $(el).find('img').attr('data-src');
+
+      if (href && title && title.length > 2) {
+        results.push({
+          title,
+          link: href.startsWith('http') ? href : `https://mycima.wecima.show${href}`,
+          img: img || '',
+          source: 'WeCima',
+          sourceName: 'وي سيما',
+          isArabic: true,
+          isSeries: href.includes('series') || title.includes('مسلسل')
+        });
+      }
+    });
+    return results;
+  } catch (e) {
+    return [];
+  }
+}
+
 // Route: Unified Search across all sources with Deduplication
 router.get('/api/movies/search-all', async (req, res) => {
   const { q } = req.query;
@@ -143,19 +174,28 @@ router.get('/api/movies/search-all', async (req, res) => {
 
   try {
     const query = q.trim();
+    const isArabicQuery = /[\u0600-\u06FF]/.test(query);
 
-    // Fetch in parallel from IMDb + ArabSeed + QFilm + CimaLight
-    const [imdbRes, arabSeedItems, qFilmItems, cimaLightItems] = await Promise.all([
+    // Fetch in parallel from IMDb + ArabSeed + QFilm + CimaLight + WeCima
+    const [imdbRes, arabSeedItems, qFilmItems, cimaLightItems, weCimaItems] = await Promise.all([
       axios.get(`https://v3.sg.media-imdb.com/suggestion/x/${encodeURIComponent(query.toLowerCase())}.json`, { headers: COMMON_HEADERS }).catch(() => null),
       searchArabSeed(query),
       searchQFilm(query),
-      searchCimaLight(query)
+      searchCimaLight(query),
+      searchWeCima(query)
     ]);
 
     let imdbItems = [];
     if (imdbRes && imdbRes.data && imdbRes.data.d) {
       imdbItems = imdbRes.data.d
         .filter(item => item.id && item.id.startsWith('tt') && (item.qid === 'movie' || item.qid === 'tvSeries' || item.qid === 'tvMiniSeries'))
+        .filter(item => {
+          if (isArabicQuery) {
+            // Do NOT include unrelated English titles for purely Arabic search queries!
+            return item.l && item.l.toLowerCase().includes(query.toLowerCase());
+          }
+          return true;
+        })
         .map(item => ({
           title: item.l,
           link: item.id,
@@ -168,7 +208,7 @@ router.get('/api/movies/search-all', async (req, res) => {
         }));
     }
 
-    const allRawResults = [...imdbItems, ...arabSeedItems, ...qFilmItems, ...cimaLightItems];
+    const allRawResults = [...arabSeedItems, ...qFilmItems, ...cimaLightItems, ...weCimaItems, ...imdbItems];
 
     // Group & Deduplicate results into clean single cards
     const groupedMap = new Map();
@@ -228,12 +268,13 @@ router.post('/api/movies/resolve-servers', async (req, res) => {
     if (s.source === 'vidsrc' || s.imdbId) {
       const idToUse = s.imdbId || s.link;
       if (idToUse) {
-        servers.push({
-          name: '🎬 English (VidSrc)',
-          url: `https://vidsrc.sbs/embed/movie/${idToUse}`,
-          type: 'iframe',
-          sourceName: 'VidSrc'
-        });
+        servers.push(
+          { name: '🎬 English (VidSrc.to)', url: `https://vidsrc.to/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
+          { name: '🎬 English (VidSrc.me)', url: `https://vidsrc.me/embed/movie?imdb=${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
+          { name: '🎬 English (VidSrc.cc)', url: `https://vidsrc.cc/v2/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
+          { name: '🎬 English (Embed.su)', url: `https://embed.su/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
+          { name: '🎬 English (2Embed)', url: `https://2embed.cc/embed/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' }
+        );
       }
       continue;
     }
