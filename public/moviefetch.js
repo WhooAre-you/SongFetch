@@ -618,24 +618,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Fallback VidSrc provider if no servers found or missing VidSrc
-        const imdbId = parentItem.imdbId || details.imdbId;
-        if (imdbId && !servers.some(s => s.name.includes('VidSrc'))) {
-            let tmdbId = null;
-            try {
-                const res = await fetch(`https://api.themoviedb.org/3/find/${imdbId}?api_key=15d2ea6d0dc1d476efbca3eba2b9bbfb&external_source=imdb_id`);
-                const data = await res.json();
-                if (data.movie_results && data.movie_results.length > 0) {
-                    tmdbId = data.movie_results[0].id;
-                }
-            } catch (err) {}
-
-            const idToUse = tmdbId || imdbId;
-            servers.push(
-                { name: "🎬 English (VidSrc.to)", url: `https://vidsrc.to/embed/movie/${idToUse}`, type: 'iframe' },
-                { name: "🎬 English (VidSrc.me)", url: `https://vidsrc.me/embed/movie?imdb=${idToUse}`, type: 'iframe' },
-                { name: "🎬 English (VidSrc.cc)", url: `https://vidsrc.cc/v2/embed/movie/${idToUse}`, type: 'iframe' },
-                { name: "🎬 English (Embed.su)", url: `https://embed.su/embed/movie/${idToUse}`, type: 'iframe' },
-                { name: "🎬 English (2Embed)", url: `https://2embed.cc/embed/${idToUse}`, type: 'iframe' }
+        const idToUse = parentItem.tmdbId || parentItem.imdbId || details.imdbId;
+        if (idToUse && !servers.some(s => s.name.includes('VidLink'))) {
+            servers.unshift(
+                { name: "✨ VidLink (بدون إعلانات 1080p)", url: `https://vidlink.pro/movie/${idToUse}`, type: 'iframe' },
+                { name: "✨ VidSrc.pro (بدون إعلانات HD)", url: `https://vidsrc.pro/embed/movie/${idToUse}`, type: 'iframe' },
+                { name: "🎬 SmashyStream (بدون إعلانات)", url: `https://embed.smashystream.com/playere.php?tmdb=${idToUse}`, type: 'iframe' },
+                { name: "🎬 AutoEmbed", url: `https://player.autoembed.cc/embed/movie/${idToUse}`, type: 'iframe' },
+                { name: "🎬 2Embed", url: `https://2embed.cc/embed/${idToUse}`, type: 'iframe' }
             );
         }
 
@@ -650,30 +640,14 @@ document.addEventListener('DOMContentLoaded', () => {
         
         let servers = [];
 
-        // English sources (multiple working providers)
-        const imdbId = parentItem.imdbId || (parentItem.externals && parentItem.externals.imdb) || (parentData && parentData.externals && parentData.externals.imdb);
-        let tmdbId = null;
+        const idToUse = parentItem.tmdbId || parentItem.imdbId || (parentItem.externals && parentItem.externals.imdb) || (parentData && parentData.externals && parentData.externals.imdb);
 
-        if (imdbId) {
-            try {
-                // Convert IMDB ID to TMDB ID for reliable vidsrc playback
-                const res = await fetch(`https://api.themoviedb.org/3/find/${imdbId}?api_key=15d2ea6d0dc1d476efbca3eba2b9bbfb&external_source=imdb_id`);
-                const data = await res.json();
-                if (data.tv_results && data.tv_results.length > 0) {
-                    tmdbId = data.tv_results[0].id;
-                }
-            } catch (err) {
-                console.error('Failed to resolve TMDB ID:', err);
-            }
-        }
-
-        if (tmdbId || imdbId) {
-            const idToUse = tmdbId || imdbId;
+        if (idToUse) {
             servers.push(
-                { name: "🎬 English (VidSrc.to)", url: `https://vidsrc.to/embed/tv/${idToUse}/${seasonNum}/${ep.number}`, type: 'iframe' },
-                { name: "🎬 English (VidSrc.me)", url: `https://vidsrc.me/embed/tv?imdb=${idToUse}&season=${seasonNum}&episode=${ep.number}`, type: 'iframe' },
-                { name: "🎬 English (Embed.su)", url: `https://embed.su/embed/tv/${tmdbId || idToUse}/${seasonNum}/${ep.number}`, type: 'iframe' },
-                { name: "🎬 English (2Embed)", url: `https://2embed.cc/embed/${idToUse}/${seasonNum}/${ep.number}`, type: 'iframe' }
+                { name: "✨ VidLink (بدون إعلانات 1080p)", url: `https://vidlink.pro/tv/${idToUse}/${seasonNum}/${ep.number}`, type: 'iframe' },
+                { name: "✨ VidSrc.pro (بدون إعلانات HD)", url: `https://vidsrc.pro/embed/tv/${idToUse}/${seasonNum}/${ep.number}`, type: 'iframe' },
+                { name: "🎬 SmashyStream (بدون إعلانات)", url: `https://embed.smashystream.com/playere.php?tmdb=${idToUse}&season=${seasonNum}&episode=${ep.number}`, type: 'iframe' },
+                { name: "🎬 2Embed", url: `https://2embed.cc/embed/${idToUse}/${seasonNum}/${ep.number}`, type: 'iframe' }
             );
         }
 

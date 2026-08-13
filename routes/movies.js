@@ -212,6 +212,36 @@ async function searchDuckDuckGo(q) {
   }
 }
 
+// Helper Scraper: TMDB Search (Guaranteed cloud fallback for Arabic & English movies)
+async function searchTMDBArabic(q) {
+  try {
+    const url = `https://api.themoviedb.org/3/search/multi?api_key=15d2ea6d0dc1d476efbca3eba2b9bbfb&language=ar-SA&query=${encodeURIComponent(q)}`;
+    const res = await axios.get(url, { timeout: 6000 });
+    if (!res.data || !res.data.results) return [];
+
+    return res.data.results
+      .filter(item => item.media_type === 'movie' || item.media_type === 'tv')
+      .map(item => {
+        const isSeries = item.media_type === 'tv';
+        const title = item.title || item.name || item.original_title || item.original_name;
+        const poster = item.poster_path ? `https://image.tmdb.org/t/p/w500${item.poster_path}` : '';
+        return {
+          title,
+          link: `tmdb_${item.id}`,
+          tmdbId: item.id,
+          imdbId: item.id,
+          img: poster || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80',
+          source: 'TMDB',
+          sourceName: 'TMDB Cinema',
+          isArabic: true,
+          isSeries
+        };
+      });
+  } catch (e) {
+    return [];
+  }
+}
+
 // Route: Unified Search across all sources with Deduplication
 router.get('/api/movies/search-all', async (req, res) => {
   const { q } = req.query;
@@ -221,8 +251,9 @@ router.get('/api/movies/search-all', async (req, res) => {
     const query = q.trim();
     const isArabicQuery = /[\u0600-\u06FF]/.test(query);
 
-    // Fetch in parallel from IMDb + ArabSeed + QFilm + CimaLight + WeCima + DuckDuckGo Fallback
-    const [imdbRes, arabSeedItems, qFilmItems, cimaLightItems, weCimaItems, ddgItems] = await Promise.all([
+    // Fetch in parallel from TMDB + IMDb + ArabSeed + QFilm + CimaLight + WeCima + DuckDuckGo
+    const [tmdbItems, imdbRes, arabSeedItems, qFilmItems, cimaLightItems, weCimaItems, ddgItems] = await Promise.all([
+      searchTMDBArabic(query),
       axios.get(`https://v3.sg.media-imdb.com/suggestion/x/${encodeURIComponent(query.toLowerCase())}.json`, { headers: COMMON_HEADERS }).catch(() => null),
       searchArabSeed(query),
       searchQFilm(query),
@@ -237,7 +268,6 @@ router.get('/api/movies/search-all', async (req, res) => {
         .filter(item => item.id && item.id.startsWith('tt') && (item.qid === 'movie' || item.qid === 'tvSeries' || item.qid === 'tvMiniSeries'))
         .filter(item => {
           if (isArabicQuery) {
-            // Do NOT include unrelated English titles for purely Arabic search queries!
             return item.l && item.l.toLowerCase().includes(query.toLowerCase());
           }
           return true;
@@ -254,7 +284,7 @@ router.get('/api/movies/search-all', async (req, res) => {
         }));
     }
 
-    const allRawResults = [...arabSeedItems, ...qFilmItems, ...cimaLightItems, ...weCimaItems, ...ddgItems, ...imdbItems];
+    const allRawResults = [...tmdbItems, ...arabSeedItems, ...qFilmItems, ...cimaLightItems, ...weCimaItems, ...ddgItems, ...imdbItems];
 
     // Group & Deduplicate results into clean single cards
     const groupedMap = new Map();
@@ -271,24 +301,22 @@ router.get('/api/movies/search-all', async (req, res) => {
           isSeries: item.isSeries,
           isArabic: item.isArabic,
           imdbId: item.imdbId || null,
+          tmdbId: item.tmdbId || null,
           sources: [
-            { source: item.source, sourceName: item.sourceName, link: item.link, imdbId: item.imdbId || null }
+            { source: item.source, sourceName: item.sourceName, link: item.link, imdbId: item.imdbId || null, tmdbId: item.tmdbId || null }
           ]
         });
       } else {
         const existing = groupedMap.get(key);
-        // Add source if not already present
         const hasSource = existing.sources.some(s => s.source === item.source);
         if (!hasSource) {
-          existing.sources.push({ source: item.source, sourceName: item.sourceName, link: item.link, imdbId: item.imdbId || null });
+          existing.sources.push({ source: item.source, sourceName: item.sourceName, link: item.link, imdbId: item.imdbId || null, tmdbId: item.tmdbId || null });
         }
-        // Prefer poster if existing poster is empty
         if ((!existing.img || existing.img.includes('unsplash')) && item.img) {
           existing.img = item.img;
         }
-        if (item.imdbId && !existing.imdbId) {
-          existing.imdbId = item.imdbId;
-        }
+        if (item.imdbId && !existing.imdbId) existing.imdbId = item.imdbId;
+        if (item.tmdbId && !existing.tmdbId) existing.tmdbId = item.tmdbId;
       }
     });
 
@@ -301,7 +329,7 @@ router.get('/api/movies/search-all', async (req, res) => {
   }
 });
 
-// Route: Extract Server Links from Arabic movie detail pages
+// Route: Extract Server Links from Arabic & Clean English movie detail pages
 router.post('/api/movies/resolve-servers', async (req, res) => {
   const { sources } = req.body;
   if (!Array.isArray(sources) || sources.length === 0) {
@@ -311,15 +339,16 @@ router.post('/api/movies/resolve-servers', async (req, res) => {
   const servers = [];
 
   for (const s of sources) {
-    if (s.source === 'vidsrc' || s.imdbId) {
-      const idToUse = s.imdbId || s.link;
+    if (s.source === 'vidsrc' || s.source === 'TMDB' || s.imdbId || s.tmdbId) {
+      const idToUse = s.tmdbId || s.imdbId || s.link;
       if (idToUse) {
         servers.push(
-          { name: '🎬 English (VidSrc.to)', url: `https://vidsrc.to/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
-          { name: '🎬 English (VidSrc.me)', url: `https://vidsrc.me/embed/movie?imdb=${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
-          { name: '🎬 English (VidSrc.cc)', url: `https://vidsrc.cc/v2/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
-          { name: '🎬 English (Embed.su)', url: `https://embed.su/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
-          { name: '🎬 English (2Embed)', url: `https://2embed.cc/embed/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' }
+          { name: '✨ VidLink (بدون إعلانات 1080p)', url: `https://vidlink.pro/movie/${idToUse}`, type: 'iframe', sourceName: 'VidLink' },
+          { name: '✨ VidSrc.pro (بدون إعلانات HD)', url: `https://vidsrc.pro/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
+          { name: '🎬 SmashyStream (بدون إعلانات)', url: `https://embed.smashystream.com/playere.php?tmdb=${idToUse}`, type: 'iframe', sourceName: 'SmashyStream' },
+          { name: '🎬 AutoEmbed', url: `https://player.autoembed.cc/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'AutoEmbed' },
+          { name: '🎬 2Embed', url: `https://2embed.cc/embed/${idToUse}`, type: 'iframe', sourceName: '2Embed' },
+          { name: '🎬 VidSrc.to', url: `https://vidsrc.to/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' }
         );
       }
       continue;
