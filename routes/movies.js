@@ -329,6 +329,53 @@ router.get('/api/movies/search-all', async (req, res) => {
   }
 });
 
+// Route: Proxy Endpoint to bypass Cloudflare anti-framing & 403 on Arabic movie embeds
+router.get('/api/movies/proxy-embed', async (req, res) => {
+  const { url: targetUrl } = req.query;
+  if (!targetUrl) return res.status(400).send('Target URL required');
+
+  try {
+    const origin = new URL(targetUrl).origin;
+    const response = await axios.get(targetUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+        'Referer': origin + '/',
+        'Origin': origin
+      },
+      timeout: 8000
+    });
+
+    const contentType = response.headers['content-type'] || 'text/html';
+    
+    if (contentType.includes('text/html')) {
+      let html = response.data;
+      const $ = cheerio.load(html);
+
+      if (!$('base').length) {
+        $('head').prepend(`<base href="${targetUrl}">`);
+      }
+
+      $('script[src*="pop"], script[src*="ad"]').remove();
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send($.html());
+    }
+
+    res.setHeader('Content-Type', contentType);
+    res.send(response.data);
+  } catch (err) {
+    console.error('Proxy embed error:', err.message);
+    res.status(500).send(`
+      <div style="color:#ef4444; font-family:sans-serif; text-align:center; padding:30px; background:#111; border-radius:8px;">
+        <h3>تعذر تحميل سيرفر المشاهدة هذا حالياً</h3>
+        <p style="color:#9ca3af;">يرجى تجربة سيرفر آخر من القائمة بالأسفل.</p>
+      </div>
+    `);
+  }
+});
+
 // Route: Extract Server Links from Arabic & Clean English movie detail pages
 router.post('/api/movies/resolve-servers', async (req, res) => {
   const { sources, title } = req.body;
@@ -337,22 +384,23 @@ router.post('/api/movies/resolve-servers', async (req, res) => {
   }
 
   const servers = [];
-  const searchTitle = title || (sources[0] && sources[0].title);
+  const searchTitle = title || (sources[0] && (sources[0].title || sources[0].name));
+  const isArabicMovie = (searchTitle && /[\u0600-\u06FF]/.test(searchTitle)) || sources.some(s => s.isArabic);
 
-  // If searchTitle is Arabic, query Arabic scrapers (ArabSeed, QFilm, CimaLight, WeCima)
-  if (searchTitle && /[\u0600-\u06FF]/.test(searchTitle)) {
+  if (isArabicMovie && searchTitle) {
     try {
+      const cleanQ = searchTitle.replace(/[^\u0600-\u06FF0-9a-zA-Z\s]/g, ' ').trim();
       const [arabSeedItems, qFilmItems, cimaLightItems, weCimaItems] = await Promise.all([
-        searchArabSeed(searchTitle),
-        searchQFilm(searchTitle),
-        searchCimaLight(searchTitle),
-        searchWeCima(searchTitle)
+        searchArabSeed(cleanQ),
+        searchQFilm(cleanQ),
+        searchCimaLight(cleanQ),
+        searchWeCima(cleanQ)
       ]);
       const arabicMatches = [...arabSeedItems, ...qFilmItems, ...cimaLightItems, ...weCimaItems];
       arabicMatches.forEach((m, idx) => {
         servers.push({
           name: `🟢 ${m.sourceName} - سيرفر ${idx + 1}`,
-          url: m.link,
+          url: `/api/movies/proxy-embed?url=${encodeURIComponent(m.link)}`,
           type: 'iframe',
           sourceName: m.sourceName
         });
@@ -362,6 +410,19 @@ router.post('/api/movies/resolve-servers', async (req, res) => {
     }
   }
 
+  // Also include direct links passed in sources
+  for (const s of sources) {
+    if (s.link && s.link.startsWith('http') && !s.link.includes('tmdb') && !s.link.includes('imdb')) {
+      servers.push({
+        name: `🟢 ${s.sourceName || 'مشاهدة مباشرة'} - سيرفر رئيسي`,
+        url: `/api/movies/proxy-embed?url=${encodeURIComponent(s.link)}`,
+        type: 'iframe',
+        sourceName: s.sourceName || 'Arabic'
+      });
+    }
+  }
+
+  // Add English servers as fallback
   for (const s of sources) {
     if (s.source === 'vidsrc' || s.source === 'TMDB' || s.imdbId || s.tmdbId) {
       const idToUse = s.tmdbId || s.imdbId || s.link;
@@ -370,61 +431,10 @@ router.post('/api/movies/resolve-servers', async (req, res) => {
           { name: '✨ VidLink (بدون إعلانات 1080p)', url: `https://vidlink.pro/movie/${idToUse}`, type: 'iframe', sourceName: 'VidLink' },
           { name: '✨ VidSrc.pro (بدون إعلانات HD)', url: `https://vidsrc.pro/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
           { name: '🎬 SmashyStream (بدون إعلانات)', url: `https://embed.smashystream.com/playere.php?tmdb=${idToUse}`, type: 'iframe', sourceName: 'SmashyStream' },
-          { name: '🎬 AutoEmbed', url: `https://player.autoembed.cc/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'AutoEmbed' },
-          { name: '🎬 2Embed', url: `https://2embed.cc/embed/${idToUse}`, type: 'iframe', sourceName: '2Embed' }
+          { name: '🎬 AutoEmbed', url: `https://player.autoembed.cc/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'AutoEmbed' }
         );
       }
-      continue;
-    }
-
-    // Arabic scrapers: Fetch detail page to extract embedded iframe/player
-    try {
-      const pageRes = await axios.get(s.link, { headers: COMMON_HEADERS, timeout: 6000 });
-      const $ = cheerio.load(pageRes.data);
-
-      let foundEmbed = false;
-
-      $('iframe').each((i, el) => {
-        let src = $(el).attr('src') || $(el).attr('data-src');
-        if (src && (src.includes('embed') || src.includes('player') || src.includes('watch') || src.includes('v=') || src.startsWith('http') || src.startsWith('//'))) {
-          if (src.startsWith('//')) src = 'https:' + src;
-          servers.push({
-            name: `🟢 ${s.sourceName} - سيرفر ${i + 1}`,
-            url: src,
-            type: 'iframe',
-            sourceName: s.sourceName
-          });
-          foundEmbed = true;
-        }
-      });
-
-      // Fallback: search video or watch buttons if no direct iframe
-      if (!foundEmbed) {
-        $('a[href*="watch"], a[href*="embed"], a[href*="download"]').each((i, el) => {
-          const href = $(el).attr('href');
-          if (href && (href.includes('embed') || href.includes('watch'))) {
-            servers.push({
-              name: `🟣 ${s.sourceName} - سيرفر ${i + 1}`,
-              url: href.startsWith('http') ? href : `${new URL(s.link).origin}${href}`,
-              type: 'iframe',
-              sourceName: s.sourceName
-            });
-            foundEmbed = true;
-          }
-        });
-      }
-
-      // If still nothing, offer direct link
-      if (!foundEmbed) {
-        servers.push({
-          name: `🔗 ${s.sourceName} - رابط مباشر`,
-          url: s.link,
-          type: 'iframe',
-          sourceName: s.sourceName
-        });
-      }
-    } catch (e) {
-      console.warn(`Failed to resolve servers for ${s.sourceName}:`, e.message);
+      break;
     }
   }
 
