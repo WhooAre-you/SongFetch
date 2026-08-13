@@ -634,7 +634,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Primary working streaming providers (SmashyStream #1)
         const idToUse = parentItem.tmdbId || parentItem.imdbId || details.imdbId;
-        if (idToUse) {
+        if (idToUse && !servers.some(s => s.url && s.url.includes('smashystream'))) {
             servers.unshift(
                 { name: "🎬 SmashyStream (سيرفر أساسي 1080p)", url: `https://embed.smashystream.com/playere.php?tmdb=${idToUse}`, type: 'iframe' },
                 { name: "✨ VidLink (سيرفر 2)", url: `https://vidlink.pro/movie/${idToUse}`, type: 'iframe' },
@@ -643,7 +643,17 @@ document.addEventListener('DOMContentLoaded', () => {
             );
         }
 
-        renderServerButtons(servers);
+        // Deduplicate servers by URL
+        const uniqueServers = [];
+        const seenUrls = new Set();
+        for (const s of servers) {
+            if (s.url && !seenUrls.has(s.url)) {
+                seenUrls.add(s.url);
+                uniqueServers.push(s);
+            }
+        }
+
+        renderServerButtons(uniqueServers);
     }
 
     // Play Episode Streams

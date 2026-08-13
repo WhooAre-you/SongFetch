@@ -438,7 +438,17 @@ router.post('/api/movies/resolve-servers', async (req, res) => {
     }
   }
 
-  res.json({ servers });
+  // Deduplicate servers by URL
+  const uniqueServers = [];
+  const seenUrls = new Set();
+  for (const s of servers) {
+    if (s.url && !seenUrls.has(s.url)) {
+      seenUrls.add(s.url);
+      uniqueServers.push(s);
+    }
+  }
+
+  res.json({ servers: uniqueServers });
 });
 
 // Route: Resolve IMDB ID for VidSrc integration
