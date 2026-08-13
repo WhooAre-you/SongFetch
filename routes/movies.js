@@ -427,11 +427,11 @@ router.post('/api/movies/resolve-servers', async (req, res) => {
     if (s.source === 'vidsrc' || s.source === 'TMDB' || s.imdbId || s.tmdbId) {
       const idToUse = s.tmdbId || s.imdbId || s.link;
       if (idToUse) {
-        servers.push(
-          { name: '✨ VidLink (بدون إعلانات 1080p)', url: `https://vidlink.pro/movie/${idToUse}`, type: 'iframe', sourceName: 'VidLink' },
-          { name: '✨ VidSrc.pro (بدون إعلانات HD)', url: `https://vidsrc.pro/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
-          { name: '🎬 SmashyStream (بدون إعلانات)', url: `https://embed.smashystream.com/playere.php?tmdb=${idToUse}`, type: 'iframe', sourceName: 'SmashyStream' },
-          { name: '🎬 AutoEmbed', url: `https://player.autoembed.cc/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'AutoEmbed' }
+        servers.unshift(
+          { name: '🎬 SmashyStream (سيرفر أساسي 1080p)', url: `https://embed.smashystream.com/playere.php?tmdb=${idToUse}`, type: 'iframe', sourceName: 'SmashyStream' },
+          { name: '✨ VidLink (سيرفر 2)', url: `https://vidlink.pro/movie/${idToUse}`, type: 'iframe', sourceName: 'VidLink' },
+          { name: '✨ VidSrc.pro (سيرفر 3)', url: `https://vidsrc.pro/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
+          { name: '🎬 AutoEmbed (سيرفر 4)', url: `https://player.autoembed.cc/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'AutoEmbed' }
         );
       }
       break;
