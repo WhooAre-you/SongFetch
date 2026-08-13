@@ -167,6 +167,51 @@ async function searchWeCima(q) {
   }
 }
 
+// Helper Scraper: DuckDuckGo Fallback for Arabic Cinema
+async function searchDuckDuckGo(q) {
+  try {
+    const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q + ' فيلم OR مسلسل')}`;
+    const res = await axios.get(url, { headers: COMMON_HEADERS, timeout: 6000 });
+    const $ = cheerio.load(res.data);
+    const results = [];
+
+    $('.result__body').each((i, el) => {
+      const a = $(el).find('.result__title a');
+      const href = a.attr('href');
+      const title = a.text().trim();
+      
+      let actualUrl = href;
+      if (href && href.includes('uddg=')) {
+        const match = href.match(/uddg=([^&]+)/);
+        if (match) actualUrl = decodeURIComponent(match[1]);
+      }
+
+      if (actualUrl && title && (actualUrl.includes('arabseed') || actualUrl.includes('qfilm') || actualUrl.includes('cimalight') || actualUrl.includes('wecima') || actualUrl.includes('egybest') || actualUrl.includes('fasel') || actualUrl.includes('mycima'))) {
+        let source = 'Cinema';
+        let sourceName = 'عرب سينما';
+        if (actualUrl.includes('arabseed')) { source = 'ArabSeed'; sourceName = 'عرب سيد'; }
+        else if (actualUrl.includes('qfilm')) { source = 'QFilm'; sourceName = 'كيوفيلم'; }
+        else if (actualUrl.includes('cimalight')) { source = 'CimaLight'; sourceName = 'سيما لايت'; }
+        else if (actualUrl.includes('wecima') || actualUrl.includes('mycima')) { source = 'WeCima'; sourceName = 'وي سيما'; }
+        else if (actualUrl.includes('egybest')) { source = 'EgyBest'; sourceName = 'إيجي بست'; }
+
+        results.push({
+          title,
+          link: actualUrl,
+          img: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80',
+          source,
+          sourceName,
+          isArabic: true,
+          isSeries: actualUrl.includes('series') || title.includes('مسلسل')
+        });
+      }
+    });
+    return results;
+  } catch (e) {
+    return [];
+  }
+}
+
 // Route: Unified Search across all sources with Deduplication
 router.get('/api/movies/search-all', async (req, res) => {
   const { q } = req.query;
@@ -176,13 +221,14 @@ router.get('/api/movies/search-all', async (req, res) => {
     const query = q.trim();
     const isArabicQuery = /[\u0600-\u06FF]/.test(query);
 
-    // Fetch in parallel from IMDb + ArabSeed + QFilm + CimaLight + WeCima
-    const [imdbRes, arabSeedItems, qFilmItems, cimaLightItems, weCimaItems] = await Promise.all([
+    // Fetch in parallel from IMDb + ArabSeed + QFilm + CimaLight + WeCima + DuckDuckGo Fallback
+    const [imdbRes, arabSeedItems, qFilmItems, cimaLightItems, weCimaItems, ddgItems] = await Promise.all([
       axios.get(`https://v3.sg.media-imdb.com/suggestion/x/${encodeURIComponent(query.toLowerCase())}.json`, { headers: COMMON_HEADERS }).catch(() => null),
       searchArabSeed(query),
       searchQFilm(query),
       searchCimaLight(query),
-      searchWeCima(query)
+      searchWeCima(query),
+      searchDuckDuckGo(query)
     ]);
 
     let imdbItems = [];
@@ -208,7 +254,7 @@ router.get('/api/movies/search-all', async (req, res) => {
         }));
     }
 
-    const allRawResults = [...arabSeedItems, ...qFilmItems, ...cimaLightItems, ...weCimaItems, ...imdbItems];
+    const allRawResults = [...arabSeedItems, ...qFilmItems, ...cimaLightItems, ...weCimaItems, ...ddgItems, ...imdbItems];
 
     // Group & Deduplicate results into clean single cards
     const groupedMap = new Map();
