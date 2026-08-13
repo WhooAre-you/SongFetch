@@ -785,7 +785,30 @@ function attachAdClickShield() {
         playerArea.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
-    // Wire up player custom controllers (Theater Mode, Lights out)
+    // Wire up player custom controllers (Fullscreen, Theater Mode, Lights out)
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    if (fullscreenBtn) {
+        fullscreenBtn.addEventListener('click', () => {
+            const wrapper = document.getElementById('video-player-wrapper');
+            if (!wrapper) return;
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                if (wrapper.requestFullscreen) {
+                    wrapper.requestFullscreen();
+                } else if (wrapper.webkitRequestFullscreen) {
+                    wrapper.webkitRequestFullscreen();
+                } else if (wrapper.msRequestFullscreen) {
+                    wrapper.msRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        });
+    }
+
     if (theaterModeBtn) {
         theaterModeBtn.addEventListener('click', () => {
             playerArea.classList.toggle('theater-mode-active');

@@ -217,6 +217,7 @@
                     <div class="player-header">
                         <h3 class="section-title" id="player-title" style="margin: 0;">Select a source to start streaming</h3>
                         <div class="player-controls-row">
+                            <button type="button" id="fullscreen-btn" class="control-btn" style="background: #2563eb; color: #fff; border: none; font-weight: 600;">🖥️ Fullscreen (ملء الشاشة)</button>
                             <button type="button" id="theater-mode-btn" class="control-btn">🎭 Theater Mode</button>
                             <button type="button" id="lights-out-btn" class="control-btn">💡 Lights Out</button>
                         </div>
@@ -225,7 +226,7 @@
                     <!-- Main Player Display -->
                     <div id="video-player-wrapper" style="position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 8px; overflow: hidden; margin-bottom: 1.5rem;">
                         <!-- Embed streaming iframe -->
-                        <iframe id="player-iframe" src="" frameborder="0" allowfullscreen allow="autoplay; fullscreen" referrerpolicy="no-referrer" style="width: 100%; height: 100%; border: none;"></iframe>
+                        <iframe id="player-iframe" src="" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true" referrerpolicy="no-referrer" style="width: 100%; height: 100%; border: none;"></iframe>
                         
                         <!-- Native HTML5 player for direct stream links -->
                         <video id="player-video" controls style="display: none; width: 100%; height: 100%; object-fit: contain; background: #000;">
