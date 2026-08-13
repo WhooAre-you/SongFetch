@@ -1,3 +1,9 @@
+// Global Ad / Popup Interceptor
+window.open = function(url, target, features) {
+    console.warn('[AdBlock] Blocked popup window request to:', url);
+    return null;
+};
+
 document.addEventListener('DOMContentLoaded', () => {
     // Search Form & Layout Elements
     const searchForm = document.getElementById('search-form');
@@ -289,14 +295,14 @@ document.addEventListener('DOMContentLoaded', () => {
         progressStatus.textContent = status;
     }
 
-    // Search Trigger (queries both standard index and Arabic sites: TopCinema, WeCima, ArabSeed, Movizland, QFilm, Prestige)
+    // Search Trigger (queries IMDb, ArabSeed, QFilm, CimaLight and deduplicates)
     async function triggerSearch(query) {
         resetUI();
         loaderText.textContent = `Searching cinema archives for "${query}"...`;
         loader.classList.remove('hidden');
 
         try {
-            const stdRes = await fetch(`/api/movies/imdb-search?q=${encodeURIComponent(query)}`).then(r => r.ok ? r.json() : { results: [] });
+            const stdRes = await fetch(`/api/movies/search-all?q=${encodeURIComponent(query)}`).then(r => r.ok ? r.json() : { results: [] });
 
             loader.classList.add('hidden');
 
@@ -360,30 +366,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 posterUrl = 'https:' + posterUrl;
             }
             
-            const sourceName = item.source || 'WeFeed';
-            
-            // Map site name to distinct vibrant badge background color
-            const sourceColorMap = {
-                'TopCinema': '#ef4444',
-                'WeCima': '#a855f7',
-                'WeCima / MyCima': '#a855f7',
-                'ArabSeed': '#eab308',
-                'Movizland': '#06b6d4',
-                'QFilm': '#ec4899',
-                'Prestige': '#10b981',
-                'WeFeed': '#3b82f6'
-            };
-            const sourceColor = sourceColorMap[sourceName] || '#9333ea';
+            // Generate source badges summary (e.g. "ArabSeed • QFilm • VidSrc")
+            let sourcesSummary = 'VidSrc';
+            if (item.sources && item.sources.length > 0) {
+                sourcesSummary = item.sources.map(s => s.sourceName).join(' • ');
+            } else if (item.sourceName) {
+                sourcesSummary = item.sourceName;
+            }
+
             const simplifiedTitle = buildDisplayTitle(item);
 
             card.innerHTML = `
                 <div class="trending-poster-wrapper">
                     <img src="${posterUrl}" alt="${simplifiedTitle}" onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80';">
-                    <span class="source-badge" style="background: ${sourceColor};">${sourceName}</span>
+                    <span class="source-badge" style="background: linear-gradient(135deg, #f59e0b, #ef4444);">${sourcesSummary}</span>
                 </div>
                 <div class="trending-info">
                     <h4>${simplifiedTitle}</h4>
-                    <p>${sourceName} Direct Index</p>
+                    <p>المصادر: ${sourcesSummary}</p>
                 </div>
             `;
 
@@ -595,26 +595,40 @@ document.addEventListener('DOMContentLoaded', () => {
         serversList.innerHTML = '<div style="color: #eab308;">⏳ Resolving streaming links...</div>';
         
         let servers = [];
-        // English sources (multiple working providers)
-        const imdbId = parentItem.imdbId || details.imdbId || (parentItem.externals && parentItem.externals.imdb) || (details.externals && details.externals.imdb);
-        let tmdbId = null;
-        
-        if (imdbId) {
+
+        // Resolve servers from aggregated sources list (ArabSeed, QFilm, CimaLight, VidSrc)
+        const sourcesToResolve = parentItem.sources || (parentItem.link ? [{ source: parentItem.source || 'vidsrc', sourceName: parentItem.sourceName || 'VidSrc', link: parentItem.link, imdbId: parentItem.imdbId }] : []);
+
+        if (sourcesToResolve.length > 0) {
             try {
-                // Convert IMDB ID to TMDB ID for reliable vidsrc playback
+                const sres = await fetch('/api/movies/resolve-servers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ sources: sourcesToResolve })
+                });
+                if (sres.ok) {
+                    const sdata = await sres.json();
+                    if (sdata.servers && sdata.servers.length > 0) {
+                        servers = servers.concat(sdata.servers);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to resolve servers:', err);
+            }
+        }
+
+        // Fallback VidSrc provider if no servers found or missing VidSrc
+        const imdbId = parentItem.imdbId || details.imdbId;
+        if (imdbId && !servers.some(s => s.name.includes('VidSrc'))) {
+            let tmdbId = null;
+            try {
                 const res = await fetch(`https://api.themoviedb.org/3/find/${imdbId}?api_key=15d2ea6d0dc1d476efbca3eba2b9bbfb&external_source=imdb_id`);
                 const data = await res.json();
                 if (data.movie_results && data.movie_results.length > 0) {
                     tmdbId = data.movie_results[0].id;
-                } else if (data.tv_results && data.tv_results.length > 0) {
-                    tmdbId = data.tv_results[0].id;
                 }
-            } catch (err) {
-                console.error('Failed to resolve TMDB ID:', err);
-            }
-        }
+            } catch (err) {}
 
-        if (tmdbId || imdbId) {
             const idToUse = tmdbId || imdbId;
             servers.push({
                 name: "🎬 English (VidSrc)",

@@ -1,11 +1,296 @@
 const express = require('express');
 const axios = require('axios');
+const cheerio = require('cheerio');
 const fs = require('fs');
 const path = require('path');
 
 const router = express.Router();
 
+const COMMON_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'ar,en-US;q=0.9,en;q=0.8',
+  'Cache-Control': 'no-cache'
+};
 
+// Helper: Normalize titles for grouping
+function normalizeTitle(rawTitle) {
+  if (!rawTitle) return '';
+  let str = rawTitle.toLowerCase();
+  
+  // Extract year
+  const yearMatch = str.match(/\b(19\d\d|20\d\d)\b/);
+  const year = yearMatch ? yearMatch[1] : '';
+
+  // Remove noise
+  str = str
+    .replace(/مشاهدة وتحميل|مشاهدة|وتحميل|تحميل|مترجم|كامل|اون لاين|اونلاين|بجودة|ممتازة|عالية|مباشر|بدون إعلانات|إعلانات|فيلم|مسلسل|حلقة|موسم/g, '')
+    .replace(/watch|download|full|hd|bluray|web-dl|1080p|720p|480p|mkv|mp4|avi|movie|film|series|season|episode/g, '')
+    .replace(/[()\-:\[\]]/g, ' ')
+    .replace(/\b\d{4}\b/g, ' ')
+    .replace(/\s+/g, '')
+    .trim();
+
+  return `${str}_${year}`;
+}
+
+// Helper Scraper: ArabSeed
+async function searchArabSeed(q) {
+  try {
+    const searchUrl = `https://arabseed.loan/find/?find=${encodeURIComponent(q)}`;
+    const res = await axios.get(searchUrl, { headers: COMMON_HEADERS, timeout: 7000 });
+    const $ = cheerio.load(res.data);
+    const results = [];
+
+    $('a').each((i, el) => {
+      const href = $(el).attr('href');
+      const title = $(el).find('h3, h2, .title, .BlockTitle').text().trim() || $(el).attr('title') || $(el).text().trim();
+      let img = $(el).find('img').attr('src') || $(el).find('img').attr('data-src');
+
+      if (href && (href.includes('/film/') || href.includes('/movie/') || href.includes('/watch/') || href.includes('/post/')) && title.length > 2) {
+        if (img && !img.startsWith('http')) img = `https://arabseed.loan${img}`;
+        const fullLink = href.startsWith('http') ? href : `https://arabseed.loan${href}`;
+        results.push({
+          title,
+          link: fullLink,
+          img: img || '',
+          source: 'ArabSeed',
+          sourceName: 'عرب سيد',
+          isArabic: true,
+          isSeries: href.includes('series') || title.includes('مسلسل')
+        });
+      }
+    });
+    return results;
+  } catch (e) {
+    console.error('ArabSeed search warning:', e.message);
+    return [];
+  }
+}
+
+// Helper Scraper: QFilm
+async function searchQFilm(q) {
+  try {
+    const searchUrl = `https://a.qfilm.tv/?s=${encodeURIComponent(q)}`;
+    const res = await axios.get(searchUrl, { headers: COMMON_HEADERS, timeout: 7000 });
+    const $ = cheerio.load(res.data);
+    const results = [];
+
+    $('a').each((i, el) => {
+      const href = $(el).attr('href');
+      const title = $(el).find('.title, h2, h3, .entry-title').text().trim() || $(el).attr('title') || $(el).text().trim();
+      let img = $(el).find('img').attr('src') || $(el).find('img').attr('data-src') || $(el).find('img').attr('data-lazy-src');
+
+      if (href && (href.includes('/movie/') || href.includes('/film/') || href.includes('/watch/') || href.includes('/post/')) && title.length > 2) {
+        if (img && !img.startsWith('http')) img = `https://a.qfilm.tv${img}`;
+        const fullLink = href.startsWith('http') ? href : `https://a.qfilm.tv${href}`;
+        results.push({
+          title,
+          link: fullLink,
+          img: img || '',
+          source: 'QFilm',
+          sourceName: 'كيوفيلم',
+          isArabic: true,
+          isSeries: href.includes('series') || title.includes('مسلسل')
+        });
+      }
+    });
+    return results;
+  } catch (e) {
+    console.error('QFilm search warning:', e.message);
+    return [];
+  }
+}
+
+// Helper Scraper: CimaLight
+async function searchCimaLight(q) {
+  try {
+    const searchUrl = `https://r.cimalight.co/main27/?s=${encodeURIComponent(q)}`;
+    const res = await axios.get(searchUrl, { headers: COMMON_HEADERS, timeout: 7000 });
+    const $ = cheerio.load(res.data);
+    const results = [];
+
+    $('a').each((i, el) => {
+      const href = $(el).attr('href');
+      const title = $(el).find('.title, h2, h3, .BlockTitle').text().trim() || $(el).attr('title') || $(el).text().trim();
+      let img = $(el).find('img').attr('src') || $(el).find('img').attr('data-src');
+
+      if (href && (href.includes('/movie/') || href.includes('/film/') || href.includes('/watch/') || href.includes('/video/')) && title.length > 2) {
+        if (img && !img.startsWith('http')) img = `https://r.cimalight.co/main27${img}`;
+        const fullLink = href.startsWith('http') ? href : `https://r.cimalight.co/main27${href}`;
+        results.push({
+          title,
+          link: fullLink,
+          img: img || '',
+          source: 'CimaLight',
+          sourceName: 'سيما لايت',
+          isArabic: true,
+          isSeries: href.includes('series') || title.includes('مسلسل')
+        });
+      }
+    });
+    return results;
+  } catch (e) {
+    console.error('CimaLight search warning:', e.message);
+    return [];
+  }
+}
+
+// Route: Unified Search across all sources with Deduplication
+router.get('/api/movies/search-all', async (req, res) => {
+  const { q } = req.query;
+  if (!q) return res.status(400).json({ error: 'Query is required' });
+
+  try {
+    const query = q.trim();
+
+    // Fetch in parallel from IMDb + ArabSeed + QFilm + CimaLight
+    const [imdbRes, arabSeedItems, qFilmItems, cimaLightItems] = await Promise.all([
+      axios.get(`https://v3.sg.media-imdb.com/suggestion/x/${encodeURIComponent(query.toLowerCase())}.json`, { headers: COMMON_HEADERS }).catch(() => null),
+      searchArabSeed(query),
+      searchQFilm(query),
+      searchCimaLight(query)
+    ]);
+
+    let imdbItems = [];
+    if (imdbRes && imdbRes.data && imdbRes.data.d) {
+      imdbItems = imdbRes.data.d
+        .filter(item => item.id && item.id.startsWith('tt') && (item.qid === 'movie' || item.qid === 'tvSeries' || item.qid === 'tvMiniSeries'))
+        .map(item => ({
+          title: item.l,
+          link: item.id,
+          imdbId: item.id,
+          img: item.i?.imageUrl || '',
+          source: 'vidsrc',
+          sourceName: 'English (VidSrc)',
+          isArabic: false,
+          isSeries: item.qid === 'tvSeries' || item.qid === 'tvMiniSeries'
+        }));
+    }
+
+    const allRawResults = [...imdbItems, ...arabSeedItems, ...qFilmItems, ...cimaLightItems];
+
+    // Group & Deduplicate results into clean single cards
+    const groupedMap = new Map();
+
+    allRawResults.forEach(item => {
+      const key = normalizeTitle(item.title);
+      if (!key || key.length < 2) return;
+
+      if (!groupedMap.has(key)) {
+        groupedMap.set(key, {
+          title: item.title,
+          key,
+          img: item.img || 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=500&auto=format&fit=crop&q=80',
+          isSeries: item.isSeries,
+          isArabic: item.isArabic,
+          imdbId: item.imdbId || null,
+          sources: [
+            { source: item.source, sourceName: item.sourceName, link: item.link, imdbId: item.imdbId || null }
+          ]
+        });
+      } else {
+        const existing = groupedMap.get(key);
+        // Add source if not already present
+        const hasSource = existing.sources.some(s => s.source === item.source);
+        if (!hasSource) {
+          existing.sources.push({ source: item.source, sourceName: item.sourceName, link: item.link, imdbId: item.imdbId || null });
+        }
+        // Prefer poster if existing poster is empty
+        if ((!existing.img || existing.img.includes('unsplash')) && item.img) {
+          existing.img = item.img;
+        }
+        if (item.imdbId && !existing.imdbId) {
+          existing.imdbId = item.imdbId;
+        }
+      }
+    });
+
+    const results = Array.from(groupedMap.values());
+
+    res.json({ results });
+  } catch (err) {
+    console.error('Unified search failed:', err.message);
+    res.status(500).json({ error: 'Search failed' });
+  }
+});
+
+// Route: Extract Server Links from Arabic movie detail pages
+router.post('/api/movies/resolve-servers', async (req, res) => {
+  const { sources } = req.body;
+  if (!Array.isArray(sources) || sources.length === 0) {
+    return res.status(400).json({ error: 'Sources list is required' });
+  }
+
+  const servers = [];
+
+  for (const s of sources) {
+    if (s.source === 'vidsrc' || s.imdbId) {
+      const idToUse = s.imdbId || s.link;
+      if (idToUse) {
+        servers.push({
+          name: '🎬 English (VidSrc)',
+          url: `https://vidsrc.sbs/embed/movie/${idToUse}`,
+          type: 'iframe',
+          sourceName: 'VidSrc'
+        });
+      }
+      continue;
+    }
+
+    // Arabic scrapers: Fetch detail page to extract embedded iframe/player
+    try {
+      const pageRes = await axios.get(s.link, { headers: COMMON_HEADERS, timeout: 6000 });
+      const $ = cheerio.load(pageRes.data);
+
+      let foundEmbed = false;
+
+      $('iframe').each((i, el) => {
+        let src = $(el).attr('src') || $(el).attr('data-src');
+        if (src && (src.includes('embed') || src.includes('player') || src.includes('watch') || src.includes('v=') || src.startsWith('http') || src.startsWith('//'))) {
+          if (src.startsWith('//')) src = 'https:' + src;
+          servers.push({
+            name: `🟢 ${s.sourceName} - سيرفر ${i + 1}`,
+            url: src,
+            type: 'iframe',
+            sourceName: s.sourceName
+          });
+          foundEmbed = true;
+        }
+      });
+
+      // Fallback: search video or watch buttons if no direct iframe
+      if (!foundEmbed) {
+        $('a[href*="watch"], a[href*="embed"], a[href*="download"]').each((i, el) => {
+          const href = $(el).attr('href');
+          if (href && (href.includes('embed') || href.includes('watch'))) {
+            servers.push({
+              name: `🟣 ${s.sourceName} - سيرفر ${i + 1}`,
+              url: href.startsWith('http') ? href : `${new URL(s.link).origin}${href}`,
+              type: 'iframe',
+              sourceName: s.sourceName
+            });
+            foundEmbed = true;
+          }
+        });
+      }
+
+      // If still nothing, offer direct link
+      if (!foundEmbed) {
+        servers.push({
+          name: `🔗 ${s.sourceName} - رابط مباشر`,
+          url: s.link,
+          type: 'iframe',
+          sourceName: s.sourceName
+        });
+      }
+    } catch (e) {
+      console.warn(`Failed to resolve servers for ${s.sourceName}:`, e.message);
+    }
+  }
+
+  res.json({ servers });
+});
 
 // Route: Resolve IMDB ID for VidSrc integration
 router.post('/api/movies/imdb', async (req, res) => {
