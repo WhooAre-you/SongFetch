@@ -654,7 +654,28 @@ document.addEventListener('DOMContentLoaded', () => {
         renderServerButtons(servers);
     }
 
-    // Render Server Buttons and set click triggers
+// Setup Ad Shield over video player container
+function attachAdClickShield() {
+    const wrapper = document.getElementById('video-player-wrapper');
+    if (!wrapper) return;
+    let shield = document.getElementById('player-ad-shield');
+    if (!shield) {
+        shield = document.createElement('div');
+        shield.id = 'player-ad-shield';
+        shield.style.cssText = 'position:absolute; inset:0; z-index:10; cursor:pointer; background:transparent;';
+        wrapper.appendChild(shield);
+
+        shield.addEventListener('click', (e) => {
+            console.log('[AdShield] Intercepted popup ad click');
+            shield.style.pointerEvents = 'none';
+            setTimeout(() => { shield.style.pointerEvents = 'auto'; }, 6000);
+        });
+    } else {
+        shield.style.pointerEvents = 'auto';
+    }
+}
+
+// Render Server Buttons and set click triggers
     function renderServerButtons(servers) {
         serversList.innerHTML = '';
         
@@ -674,6 +695,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.querySelectorAll('.server-tab').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 
+                attachAdClickShield();
+
                 if (srv.type === 'iframe') {
                     playerVideo.style.display = 'none';
                     playerVideo.pause();
