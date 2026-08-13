@@ -331,12 +331,36 @@ router.get('/api/movies/search-all', async (req, res) => {
 
 // Route: Extract Server Links from Arabic & Clean English movie detail pages
 router.post('/api/movies/resolve-servers', async (req, res) => {
-  const { sources } = req.body;
+  const { sources, title } = req.body;
   if (!Array.isArray(sources) || sources.length === 0) {
     return res.status(400).json({ error: 'Sources list is required' });
   }
 
   const servers = [];
+  const searchTitle = title || (sources[0] && sources[0].title);
+
+  // If searchTitle is Arabic, query Arabic scrapers (ArabSeed, QFilm, CimaLight, WeCima)
+  if (searchTitle && /[\u0600-\u06FF]/.test(searchTitle)) {
+    try {
+      const [arabSeedItems, qFilmItems, cimaLightItems, weCimaItems] = await Promise.all([
+        searchArabSeed(searchTitle),
+        searchQFilm(searchTitle),
+        searchCimaLight(searchTitle),
+        searchWeCima(searchTitle)
+      ]);
+      const arabicMatches = [...arabSeedItems, ...qFilmItems, ...cimaLightItems, ...weCimaItems];
+      arabicMatches.forEach((m, idx) => {
+        servers.push({
+          name: `🟢 ${m.sourceName} - سيرفر ${idx + 1}`,
+          url: m.link,
+          type: 'iframe',
+          sourceName: m.sourceName
+        });
+      });
+    } catch (e) {
+      console.warn('Arabic live servers search error:', e.message);
+    }
+  }
 
   for (const s of sources) {
     if (s.source === 'vidsrc' || s.source === 'TMDB' || s.imdbId || s.tmdbId) {
@@ -347,8 +371,7 @@ router.post('/api/movies/resolve-servers', async (req, res) => {
           { name: '✨ VidSrc.pro (بدون إعلانات HD)', url: `https://vidsrc.pro/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' },
           { name: '🎬 SmashyStream (بدون إعلانات)', url: `https://embed.smashystream.com/playere.php?tmdb=${idToUse}`, type: 'iframe', sourceName: 'SmashyStream' },
           { name: '🎬 AutoEmbed', url: `https://player.autoembed.cc/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'AutoEmbed' },
-          { name: '🎬 2Embed', url: `https://2embed.cc/embed/${idToUse}`, type: 'iframe', sourceName: '2Embed' },
-          { name: '🎬 VidSrc.to', url: `https://vidsrc.to/embed/movie/${idToUse}`, type: 'iframe', sourceName: 'VidSrc' }
+          { name: '🎬 2Embed', url: `https://2embed.cc/embed/${idToUse}`, type: 'iframe', sourceName: '2Embed' }
         );
       }
       continue;

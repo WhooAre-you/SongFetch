@@ -604,7 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const sres = await fetch('/api/movies/resolve-servers', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ sources: sourcesToResolve })
+                    body: JSON.stringify({ sources: sourcesToResolve, title: parentItem.title || activeMovieTitle })
                 });
                 if (sres.ok) {
                     const sdata = await sres.json();
