@@ -4,6 +4,21 @@ window.open = function(url, target, features) {
     return null;
 };
 
+// Track iframe interaction timestamps to absorb popunder tabs
+let lastPlayerInteraction = 0;
+document.addEventListener('mousedown', (e) => {
+    if (e.target && (e.target.closest('#video-player-wrapper') || e.target.closest('.server-selector-container'))) {
+        lastPlayerInteraction = Date.now();
+    }
+});
+
+window.addEventListener('blur', () => {
+    if (Date.now() - lastPlayerInteraction < 1500) {
+        console.warn('[AdBlock] Popunder tab attempt absorbed');
+        setTimeout(() => window.focus(), 10);
+    }
+});
+
 document.addEventListener('DOMContentLoaded', () => {
     // Search Form & Layout Elements
     const searchForm = document.getElementById('search-form');
@@ -620,7 +635,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Fallback VidSrc provider if no servers found or missing VidSrc
         const idToUse = parentItem.tmdbId || parentItem.imdbId || details.imdbId;
         if (idToUse && !servers.some(s => s.name.includes('VidLink'))) {
-            servers.unshift(
+            servers.push(
                 { name: "✨ VidLink (بدون إعلانات 1080p)", url: `https://vidlink.pro/movie/${idToUse}`, type: 'iframe' },
                 { name: "✨ VidSrc.pro (بدون إعلانات HD)", url: `https://vidsrc.pro/embed/movie/${idToUse}`, type: 'iframe' },
                 { name: "🎬 SmashyStream (بدون إعلانات)", url: `https://embed.smashystream.com/playere.php?tmdb=${idToUse}`, type: 'iframe' },
