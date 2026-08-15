@@ -28,7 +28,7 @@ async function ensureYtDlp(force = false) {
     try {
       const stats = fs.statSync(ytDlpPath);
       const isRecent = (Date.now() - stats.mtimeMs) < ONE_DAY_MS;
-      const isValidSize = stats.size > 1000000; // > 1MB
+      const isValidSize = stats.size > 10000000; // Standalone binary is > 10MB (Linux 38MB, Windows 17MB)
       if (isRecent && isValidSize) {
         needsDownload = false;
       }
