@@ -363,6 +363,145 @@ router.post('/api/mediafetch/info', async (req, res) => {
       }
     }
 
+    // If it is TikTok, try the dedicated TikWM extractor first (instant, bypasses datacenter blocks, HD watermark-free)
+    if (platform === 'tiktok') {
+      try {
+        console.log('Fetching TikTok media via TikWM:', url);
+        const tikwmRes = await axios.post('https://www.tikwm.com/api/', qs.stringify({ url }), {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+          },
+          timeout: 8000
+        });
+        if (tikwmRes.data && tikwmRes.data.code === 0 && tikwmRes.data.data) {
+          const tkData = tikwmRes.data.data;
+          const images = tkData.images || [];
+          
+          if (images.length > 0) {
+            const firstImgSize = await getRemoteFileSize(images[0]);
+            return res.json({
+              title: tkData.title || 'TikTok Slideshow',
+              thumbnail: tkData.cover || '/favicon.svg',
+              duration: 'Slideshow',
+              uploader: tkData.author ? tkData.author.unique_id : 'TikTok Creator',
+              platform: 'tiktok',
+              formats: [],
+              images: images.map((img, idx) => ({ index: idx, url: img, type: 'image', thumbnail: img })),
+              audioSize: 'Unknown size',
+              bestSize: firstImgSize ? `${formatSize(firstImgSize)} per photo` : 'Unknown size'
+            });
+          } else {
+            const videoUrl = tkData.play;
+            const sizeBytes = tkData.size || await getRemoteFileSize(videoUrl);
+            return res.json({
+              title: tkData.title || 'TikTok Video',
+              thumbnail: tkData.cover || '/favicon.svg',
+              duration: formatDuration(tkData.duration),
+              uploader: tkData.author ? (tkData.author.nickname || tkData.author.unique_id) : 'TikTok Creator',
+              platform: 'tiktok',
+              formats: [{ height: 'best', size: formatSize(sizeBytes), url: videoUrl }],
+              audioSize: 'Unknown size',
+              bestSize: formatSize(sizeBytes)
+            });
+          }
+        }
+      } catch (tkErr) {
+        console.warn('TikWM primary extraction error, will fallback to yt-dlp:', tkErr.message);
+      }
+    }
+
+    // If it is Instagram, try Snapinsta / Snapsave extractors first
+    if (platform === 'instagram') {
+      try {
+        console.log('Fetching Instagram media via Snapinsta:', url);
+        const snapRes = await axios.post('https://snapinsta.app/action.php', qs.stringify({ url, action: 'post' }), {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Referer': 'https://snapinsta.app/',
+            'Origin': 'https://snapinsta.app'
+          },
+          timeout: 8000
+        });
+
+        const decoded = deobfuscateSnapsave(snapRes.data);
+        if (decoded) {
+          const cleanHtml = extractHtmlFromJs(decoded);
+          const $ = cheerio.load(cleanHtml);
+          const mediaItems = [];
+
+          $('a').each((i, el) => {
+            const href = $(el).attr('href');
+            if (href && href.startsWith('http')) {
+              const text = $(el).text().toLowerCase();
+              const cleanUrl = href.replace(/\\/g, '');
+              if (cleanUrl.includes('download-private') || (cleanUrl.includes('facebook.com') && !cleanUrl.includes('video'))) {
+                return;
+              }
+              
+              const isVideo = cleanUrl.includes('.mp4') || text.includes('video');
+              const isPhoto = cleanUrl.includes('rapidcdn.app') || cleanUrl.includes('scontent') || cleanUrl.includes('cdninstagram') || cleanUrl.includes('.jpg') || cleanUrl.includes('.png') || cleanUrl.includes('.webp');
+              
+              if (isVideo || isPhoto) {
+                let thumbUrl = '';
+                const parent = $(el).closest('.download-items');
+                if (parent.length > 0) {
+                  thumbUrl = parent.find('img').attr('src') || '';
+                }
+                if (!thumbUrl) {
+                  thumbUrl = $(el).parent().find('img').attr('src') || '';
+                }
+                
+                const exists = mediaItems.some(item => item.url === cleanUrl);
+                if (!exists) {
+                  mediaItems.push({
+                    url: cleanUrl,
+                    type: isVideo ? 'video' : 'image',
+                    thumbnail: thumbUrl ? thumbUrl.replace(/\\/g, '') : ''
+                  });
+                }
+              }
+            }
+          });
+
+          if (mediaItems.length === 1 && mediaItems[0].type === 'video') {
+            const sizeBytes = await getRemoteFileSize(mediaItems[0].url);
+            return res.json({
+              title: `Instagram Video (${new Date().toLocaleDateString()})`,
+              thumbnail: mediaItems[0].thumbnail || '/favicon.svg',
+              duration: 'Unknown',
+              uploader: 'Instagram Creator',
+              platform: 'instagram',
+              formats: [{ height: 'best', size: sizeBytes ? formatSize(sizeBytes) : 'Unknown size', url: mediaItems[0].url }],
+              audioSize: 'Unknown size',
+              bestSize: sizeBytes ? formatSize(sizeBytes) : 'Unknown size'
+            });
+          } else if (mediaItems.length > 0) {
+            const firstImgSize = await getRemoteFileSize(mediaItems[0].url);
+            return res.json({
+              title: `Instagram Post (${new Date().toLocaleDateString()})`,
+              thumbnail: mediaItems[0].thumbnail || mediaItems[0].url,
+              duration: 'Slideshow',
+              uploader: 'Instagram Creator',
+              platform: 'instagram',
+              formats: [],
+              images: mediaItems.map((item, idx) => ({
+                index: idx,
+                url: item.url,
+                type: item.type,
+                thumbnail: item.thumbnail || item.url
+              })),
+              audioSize: 'Unknown size',
+              bestSize: firstImgSize ? `${formatSize(firstImgSize)} per item` : 'Unknown size'
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Snapinsta primary Instagram extraction error, will fallback:', err.message);
+      }
+    }
+
     const ytDlpBinary = await ensureYtDlp();
     const args = [
       '--extractor-args', 'youtube:player_client=mweb,android',
