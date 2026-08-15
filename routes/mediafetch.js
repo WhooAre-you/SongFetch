@@ -964,8 +964,11 @@ router.post('/api/mediafetch/info', async (req, res) => {
           }
         }
       }
+      if (!bestAudioSize && parsedData.duration) {
+        bestAudioSize = Math.round((128000 / 8) * parsedData.duration);
+      }
 
-      const formatOptions = resolutions.map(h => {
+      let formatOptions = resolutions.map(h => {
         let videoSize = 0;
         if (parsedData.formats) {
           const videoForHeight = parsedData.formats.filter(f => f.height === h && f.vcodec !== 'none');
@@ -987,6 +990,31 @@ router.post('/api/mediafetch/info', async (req, res) => {
           size: formatSize(totalSize)
         };
       });
+
+      if (platform === 'youtube' && parsedData.duration) {
+        const standardHeights = [1080, 960, 640, 428, 320, 214];
+        const bitrates = {
+          1080: 5000000,
+          960: 4000000,
+          640: 2300000,
+          428: 830000,
+          320: 440000,
+          214: 210000
+        };
+        
+        standardHeights.forEach(sh => {
+          const exists = formatOptions.some(f => Math.abs(f.height - sh) < 20);
+          if (!exists) {
+            const videoSize = Math.round((bitrates[sh] / 8) * parsedData.duration);
+            const totalSize = videoSize + bestAudioSize;
+            formatOptions.push({
+              height: sh,
+              size: formatSize(totalSize)
+            });
+          }
+        });
+        formatOptions.sort((a, b) => b.height - a.height);
+      }
 
       const bestFormat = parsedData.formats ? parsedData.formats.sort((a, b) => (b.tbr || 0) - (a.tbr || 0))[0] : null;
       let bestSizeVal = (formatOptions.length > 0 && formatOptions[0].size !== 'Unknown size') 
@@ -1096,6 +1124,69 @@ router.post('/api/mediafetch/download', async (req, res) => {
       if (error) {
         console.error('yt-dlp download failed:', error.message);
         console.error('yt-dlp download stderr:', stderr);
+
+        // Fallback for YouTube if yt-dlp fails due to bot check / sign in
+        if (platform === 'youtube') {
+          console.warn('YouTube download failed/blocked. Attempting fallback download using unblocked android client...');
+          const fallbackArgs = [
+            '--extractor-args', 'youtube:player_client=android',
+            '--no-cache-dir',
+            '--ffmpeg-location', ffmpegDir
+          ];
+          if (quality === 'audio') {
+            fallbackArgs.push(
+              '-x',
+              '--audio-format', 'mp3',
+              '--audio-quality', '0',
+              '-o', path.join(tempDir, `${tempId}.%(ext)s`)
+            );
+          } else {
+            fallbackArgs.push(
+              '-f', '18/best',
+              '--merge-output-format', 'mp4',
+              '-o', path.join(tempDir, `${tempId}.%(ext)s`)
+            );
+          }
+          fallbackArgs.push(url);
+
+          execFile(ytDlpBinary, fallbackArgs, { maxBuffer: 1024 * 1024 * 50 }, async (fbError, fbStdout, fbStderr) => {
+            if (fbError) {
+              console.error('YouTube android client download fallback also failed:', fbError.message);
+              return res.status(500).json({ error: `Download failed. Detail: ${fbError.message}` });
+            }
+
+            let finalFilePath = path.join(tempDir, `${tempId}.${ext}`);
+            if (!fs.existsSync(finalFilePath)) {
+              const files = fs.readdirSync(tempDir);
+              const matchedFile = files.find(f => f.startsWith(tempId));
+              if (matchedFile) {
+                finalFilePath = path.join(tempDir, matchedFile);
+              } else {
+                return res.status(500).json({ error: 'Downloaded file was not generated.' });
+              }
+            }
+
+            const safeFilename = `${title || 'video'}.${ext}`.replace(/[\\/:*?"<>|]/g, '_');
+            res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
+            res.setHeader('Content-Type', quality === 'audio' ? 'audio/mpeg' : 'video/mp4');
+
+            const fileStream = fs.createReadStream(finalFilePath);
+            fileStream.pipe(res);
+
+            fileStream.on('end', () => {
+              fs.unlink(finalFilePath, (err) => {
+                if (err) console.error('Failed to delete temporary video file:', err.message);
+                else console.log(`Temporary file cleaned up: ${finalFilePath}`);
+              });
+            });
+
+            fileStream.on('error', (err) => {
+              console.error('Video file stream error:', err.message);
+              fs.unlink(finalFilePath, () => {});
+            });
+          });
+          return;
+        }
 
         // Fallback for TikTok if yt-dlp fails
         if (platform === 'tiktok') {
