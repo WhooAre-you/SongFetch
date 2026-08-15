@@ -13,12 +13,13 @@ if (!fs.existsSync(tempDir)) {
 // OS-specific yt-dlp setup
 const isWindows = process.platform === 'win32';
 const ytDlpFileName = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
-const ytDlpPath = path.join(binDir, ytDlpFileName);
+const targetDir = isWindows ? binDir : tempDir;
+const ytDlpPath = path.join(targetDir, ytDlpFileName);
 
 // Download yt-dlp dynamically if not present
 async function ensureYtDlp(force = false) {
-  if (!fs.existsSync(binDir)) {
-    fs.mkdirSync(binDir, { recursive: true });
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
   }
 
   const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -214,6 +215,7 @@ function cleanTempDir() {
     try {
       const files = fs.readdirSync(tempDir);
       files.forEach(file => {
+        if (file.startsWith('yt-dlp') || file.startsWith('cookies')) return;
         const filePath = path.join(tempDir, file);
         if (fs.statSync(filePath).isFile()) {
           fs.unlinkSync(filePath);
