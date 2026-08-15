@@ -153,7 +153,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 uploader: data.uploader,
                 platform: data.platform,
                 formats: data.formats,
-                images: data.images
+                images: data.images,
+                directUrl: (data.formats && data.formats.length > 0 && data.formats[0].url) ? data.formats[0].url : null
             };
 
             // Populate Video Info details
@@ -399,9 +400,9 @@ document.addEventListener('DOMContentLoaded', () => {
             downloadBtn.disabled = true;
             downloadProgress.classList.remove('hidden');
 
-            // If it's a direct link option (e.g. Snapsave Facebook direct CDN links)
-            if (quality === 'direct') {
-                const directUrl = selectedOption.dataset.url;
+            // If it's a direct link option (e.g. TikWM, Snapsave Facebook direct CDN links)
+            const directUrl = (selectedOption && selectedOption.dataset.url) || currentMediaData.directUrl;
+            if (quality === 'direct' || directUrl) {
                 updateProgressUI(0, 'Connecting to CDN stream...');
                 try {
                     await downloadFileFromProxy(directUrl, currentMediaData.title, 'mp4', (percent, loadedBytes, totalBytes) => {

@@ -144,12 +144,34 @@ function extractHtmlFromJs(str) {
   return str;
 }
 
+// Helper: Resolve shortened redirects (e.g. vt.tiktok.com, vm.tiktok.com, fb.watch, share links)
+async function resolveRedirectUrl(targetUrl) {
+  try {
+    if (targetUrl.includes('vt.tiktok.com') || targetUrl.includes('vm.tiktok.com') || targetUrl.includes('fb.watch') || targetUrl.includes('/share/')) {
+      const res = await axios.get(targetUrl, {
+        maxRedirects: 5,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+        },
+        timeout: 5000
+      });
+      return (res.request && res.request.res && res.request.res.responseUrl) || res.config.url || targetUrl;
+    }
+  } catch (e) {
+    // Ignore and return original
+  }
+  return targetUrl;
+}
+
 // Route: Fetch Media Info (metadata + available resolutions or photos)
 router.post('/api/mediafetch/info', async (req, res) => {
-  const { url } = req.body;
+  let { url } = req.body;
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
+
+  // Auto-resolve shortened redirects
+  url = await resolveRedirectUrl(url);
 
   let platform = 'unknown';
   const urlLower = url.toLowerCase();
@@ -836,10 +858,13 @@ router.post('/api/mediafetch/info', async (req, res) => {
 
 // Route: Download Video / Audio (via yt-dlp)
 router.post('/api/mediafetch/download', async (req, res) => {
-  const { url, quality, title } = req.body;
+  let { url, quality, title } = req.body;
   if (!url) {
     return res.status(400).json({ error: 'URL is required' });
   }
+
+  // Auto-resolve shortened redirects
+  url = await resolveRedirectUrl(url);
 
   let platform = 'unknown';
   const urlLower = url.toLowerCase();
@@ -889,10 +914,87 @@ router.post('/api/mediafetch/download', async (req, res) => {
 
     args.push(url);
 
-    execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+    execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, async (error, stdout, stderr) => {
       if (error) {
         console.error('yt-dlp download failed:', error.message);
         console.error('yt-dlp download stderr:', stderr);
+
+        // Fallback for TikTok if yt-dlp fails
+        if (platform === 'tiktok') {
+          try {
+            console.log('Attempting TikWM download fallback for TikTok...');
+            const tikwmRes = await axios.post('https://www.tikwm.com/api/', qs.stringify({ url }), {
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              timeout: 10000
+            });
+            if (tikwmRes.data && tikwmRes.data.code === 0 && tikwmRes.data.data) {
+              const videoUrl = quality === 'audio' ? (tikwmRes.data.data.music || tikwmRes.data.data.play) : tikwmRes.data.data.play;
+              if (videoUrl) {
+                console.log('TikWM fallback stream acquired:', videoUrl);
+                const streamRes = await axios.get(videoUrl, {
+                  responseType: 'stream',
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+                  }
+                });
+                const safeFilename = `${title || 'tiktok_media'}.${ext}`.replace(/[\\/:*?"<>|]/g, '_');
+                res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
+                res.setHeader('Content-Type', quality === 'audio' ? 'audio/mpeg' : 'video/mp4');
+                return streamRes.data.pipe(res);
+              }
+            }
+          } catch (tkErr) {
+            console.error('TikWM download fallback failed:', tkErr.message);
+          }
+        }
+
+        // Fallback for Instagram if yt-dlp fails
+        if (platform === 'instagram') {
+          try {
+            console.log('Attempting Snapinsta/Snapsave download fallback for Instagram...');
+            const snapRes = await axios.post('https://snapinsta.app/action.php', qs.stringify({ url, action: 'post' }), {
+              headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Referer': 'https://snapinsta.app/',
+                'Origin': 'https://snapinsta.app'
+              },
+              timeout: 10000
+            });
+            const decoded = deobfuscateSnapsave(snapRes.data);
+            if (decoded) {
+              const cleanHtml = extractHtmlFromJs(decoded);
+              const $ = cheerio.load(cleanHtml);
+              let directUrl = null;
+              $('a').each((i, el) => {
+                const href = $(el).attr('href');
+                if (href && href.startsWith('http')) {
+                  const cleanHref = href.replace(/\\/g, '');
+                  if (cleanHref.includes('.mp4') || $(el).text().toLowerCase().includes('video')) {
+                    if (!directUrl) directUrl = cleanHref;
+                  }
+                }
+              });
+              if (directUrl) {
+                console.log('Snapinsta fallback stream acquired:', directUrl);
+                const streamRes = await axios.get(directUrl, {
+                  responseType: 'stream',
+                  headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    'Referer': 'https://www.instagram.com/'
+                  }
+                });
+                const safeFilename = `${title || 'instagram_video'}.${ext}`.replace(/[\\/:*?"<>|]/g, '_');
+                res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
+                res.setHeader('Content-Type', quality === 'audio' ? 'audio/mpeg' : 'video/mp4');
+                return streamRes.data.pipe(res);
+              }
+            }
+          } catch (igErr) {
+            console.error('Instagram download fallback failed:', igErr.message);
+          }
+        }
+
         return res.status(500).json({ error: `Download failed. Detail: ${error.message}` });
       }
 
