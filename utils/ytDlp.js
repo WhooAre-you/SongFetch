@@ -210,6 +210,23 @@ async function execYtDlp(args, options = {}) {
   });
 }
 
+function cleanTempDir() {
+  if (fs.existsSync(tempDir)) {
+    try {
+      const files = fs.readdirSync(tempDir);
+      files.forEach(file => {
+        const filePath = path.join(tempDir, file);
+        if (fs.statSync(filePath).isFile()) {
+          fs.unlinkSync(filePath);
+        }
+      });
+      console.log('Temporary files cleaned up successfully on startup.');
+    } catch (e) {
+      console.error('Failed to clean up temp files:', e.message);
+    }
+  }
+}
+
 module.exports = {
   ensureYtDlp,
   execYtDlp,
@@ -219,5 +236,6 @@ module.exports = {
   binDir,
   isWindows,
   formatDuration,
-  formatSize
+  formatSize,
+  cleanTempDir
 };

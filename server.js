@@ -8,7 +8,7 @@ try {
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const { ensureYtDlp } = require('./utils/ytDlp');
+const { ensureYtDlp, cleanTempDir } = require('./utils/ytDlp');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -55,6 +55,7 @@ app.listen(PORT, async () => {
   console.log(` URL: http://localhost:${PORT}`);
   console.log(`=========================================`);
   try {
+    cleanTempDir();
     await ensureYtDlp();
   } catch (e) {
     console.error('Warning: Failed to verify or download yt-dlp on startup. Will try again on demand.');

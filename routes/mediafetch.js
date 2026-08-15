@@ -926,6 +926,14 @@ router.post('/api/mediafetch/download', async (req, res) => {
         console.error('Video file stream error:', err.message);
         fs.unlink(finalFilePath, () => {});
       });
+
+      res.on('close', () => {
+        if (fs.existsSync(finalFilePath)) {
+          fs.unlink(finalFilePath, (err) => {
+            if (!err) console.log(`Aborted request clean-up: ${finalFilePath}`);
+          });
+        }
+      });
     });
 
   } catch (err) {

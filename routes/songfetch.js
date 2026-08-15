@@ -664,6 +664,14 @@ router.post('/api/download', async (req, res) => {
         console.error('File stream error:', err.message);
         fs.unlink(finalMp3Path, () => {});
       });
+
+      res.on('close', () => {
+        if (fs.existsSync(finalMp3Path)) {
+          fs.unlink(finalMp3Path, (err) => {
+            if (!err) console.log(`Aborted request clean-up: ${finalMp3Path}`);
+          });
+        }
+      });
     });
 
   } catch (err) {
