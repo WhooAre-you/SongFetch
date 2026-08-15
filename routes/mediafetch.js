@@ -1354,40 +1354,4 @@ router.post('/api/mediafetch/download-direct', async (req, res) => {
   }
 });
 
-router.get('/api/mediafetch/diagnose', async (req, res) => {
-  try {
-    const { ensureYtDlp } = require('../utils/ytDlp');
-    const { execFile } = require('child_process');
-    const binary = await ensureYtDlp();
-    const stats = fs.statSync(binary);
-    
-    const url = 'https://youtu.be/624VP_CCRrs';
-    execFile(binary, ['--extractor-args', 'youtube:skip=webpage;player_client=android_vr', '--no-cache-dir', '-J', '--no-playlist', url], (err, stdout, stderr) => {
-      if (err) {
-        return res.json({ error: err.message, stderr: stderr || null });
-      }
-      try {
-        const data = JSON.parse(stdout);
-        const formats = data.formats.map(f => ({
-          format_id: f.format_id,
-          ext: f.ext,
-          height: f.height,
-          vcodec: f.vcodec,
-          acodec: f.acodec,
-          filesize: f.filesize || f.filesize_approx || null
-        }));
-        res.json({
-          title: data.title,
-          formatsCount: formats.length,
-          formats: formats.slice(0, 10)
-        });
-      } catch (parseErr) {
-        res.json({ error: 'Parse error: ' + parseErr.message, stdout: stdout.substring(0, 500) });
-      }
-    });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 module.exports = router;
