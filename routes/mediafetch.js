@@ -523,7 +523,6 @@ router.post('/api/mediafetch/info', async (req, res) => {
 
     const ytDlpBinary = await ensureYtDlp();
     const args = [
-      '--extractor-args', 'youtube:player_client=mweb,android',
       '--no-cache-dir',
       '-J',
       '--no-playlist',
@@ -934,9 +933,17 @@ router.post('/api/mediafetch/info', async (req, res) => {
         });
       }
       
-      const resolutions = Array.from(uniqueHeights)
-        .filter(h => [144, 240, 360, 480, 720, 1080, 1440, 2160].includes(h))
+      const allHeights = Array.from(uniqueHeights)
+        .filter(h => h >= 144)
         .sort((a, b) => b - a);
+
+      const resolutions = [];
+      allHeights.forEach(h => {
+        const isDuplicate = resolutions.some(r => Math.abs(r - h) < 50);
+        if (!isDuplicate) {
+          resolutions.push(h);
+        }
+      });
 
       let bestAudioSize = 0;
       if (parsedData.formats) {
@@ -1046,7 +1053,6 @@ router.post('/api/mediafetch/download', async (req, res) => {
     console.log(`Starting media download using yt-dlp for: ${url} (Quality: ${quality})`);
 
     let args = [
-      '--extractor-args', 'youtube:player_client=mweb,android',
       '--no-cache-dir',
       '--ffmpeg-location', ffmpegDir
     ];

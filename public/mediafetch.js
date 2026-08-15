@@ -20,6 +20,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Selectors
     const qualitySelectorBlock = document.getElementById('quality-selector-block');
     const qualitySelect = document.getElementById('quality-select');
+    const customQualityWrapper = document.getElementById('custom-quality-wrapper');
+    const customQualityTrigger = document.getElementById('custom-quality-trigger');
+    const selectedQualityBadge = document.getElementById('selected-quality-badge');
+    const selectedQualityText = document.getElementById('selected-quality-text');
+    const selectedQualitySize = document.getElementById('selected-quality-size');
+    const customQualityOptions = document.getElementById('custom-quality-options');
+
     const photoSelectionContainer = document.getElementById('photo-selection-container');
     const photoGrid = document.getElementById('photo-grid');
     const selectAllPhotos = document.getElementById('select-all-photos');
@@ -33,6 +40,121 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressFill = document.getElementById('progress-fill');
 
     let currentMediaData = null;
+
+    // Custom Dropdown Open/Close Handlers
+    if (customQualityTrigger) {
+        customQualityTrigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = customQualityWrapper && customQualityWrapper.classList.contains('open');
+            if (isOpen) {
+                closeCustomDropdown();
+            } else {
+                openCustomDropdown();
+            }
+        });
+    }
+
+    function openCustomDropdown() {
+        if (!customQualityWrapper || !customQualityOptions) return;
+        customQualityWrapper.classList.add('open');
+        customQualityOptions.classList.remove('hidden');
+        if (customQualityTrigger) customQualityTrigger.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeCustomDropdown() {
+        if (!customQualityWrapper || !customQualityOptions) return;
+        customQualityWrapper.classList.remove('open');
+        customQualityOptions.classList.add('hidden');
+        if (customQualityTrigger) customQualityTrigger.setAttribute('aria-expanded', 'false');
+    }
+
+    document.addEventListener('click', (e) => {
+        if (customQualityWrapper && !customQualityWrapper.contains(e.target)) {
+            closeCustomDropdown();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeCustomDropdown();
+        }
+    });
+
+    function setupCustomQualityOptions(optionsList) {
+        if (!customQualityOptions || !qualitySelect) return;
+        customQualityOptions.innerHTML = '';
+        qualitySelect.innerHTML = '';
+
+        if (!optionsList || optionsList.length === 0) return;
+
+        optionsList.forEach((opt, idx) => {
+            // Native option element for backup/forms
+            const nativeOpt = document.createElement('option');
+            nativeOpt.value = opt.value;
+            nativeOpt.textContent = `${opt.name}${opt.size ? ` - ${opt.size}` : ''}`;
+            if (opt.url) nativeOpt.dataset.url = opt.url;
+            qualitySelect.appendChild(nativeOpt);
+
+            // Custom UI item
+            const item = document.createElement('div');
+            item.className = `custom-option-item${idx === 0 ? ' selected' : ''}`;
+            item.setAttribute('role', 'option');
+            item.setAttribute('data-value', opt.value);
+            item.setAttribute('aria-selected', idx === 0 ? 'true' : 'false');
+
+            item.innerHTML = `
+                <div class="option-left">
+                    <span class="quality-badge ${opt.badgeClass || 'badge-sd'}">${opt.badge}</span>
+                    <span class="option-name">${opt.name}</span>
+                </div>
+                <div class="option-right">
+                    ${opt.size ? `<span class="option-size">${opt.size}</span>` : ''}
+                    <svg class="option-check" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+            `;
+
+            item.addEventListener('click', () => {
+                selectQualityOption(opt, item);
+                closeCustomDropdown();
+            });
+
+            customQualityOptions.appendChild(item);
+        });
+
+        // Set initial selected item
+        selectQualityOption(optionsList[0], customQualityOptions.firstElementChild);
+    }
+
+    function selectQualityOption(opt, itemEl) {
+        if (!opt) return;
+        qualitySelect.value = opt.value;
+        
+        if (selectedQualityBadge) {
+            selectedQualityBadge.textContent = opt.badge;
+            selectedQualityBadge.className = `quality-badge ${opt.badgeClass || 'badge-sd'}`;
+        }
+        if (selectedQualityText) {
+            selectedQualityText.textContent = opt.name;
+        }
+        if (selectedQualitySize) {
+            selectedQualitySize.textContent = opt.size || 'Ready';
+            selectedQualitySize.style.display = opt.size ? 'inline-block' : 'none';
+        }
+
+        if (customQualityOptions) {
+            const allItems = customQualityOptions.querySelectorAll('.custom-option-item');
+            allItems.forEach(el => {
+                el.classList.remove('selected');
+                el.setAttribute('aria-selected', 'false');
+            });
+            if (itemEl) {
+                itemEl.classList.add('selected');
+                itemEl.setAttribute('aria-selected', 'true');
+            }
+        }
+    }
 
     // Show/hide clear button on input
     searchInput.addEventListener('input', () => {
@@ -172,39 +294,82 @@ document.addEventListener('DOMContentLoaded', () => {
                 videoFilesizeContainer.classList.add('hidden');
                 photoSelectionContainer.classList.add('hidden');
                 
-                qualitySelect.innerHTML = '';
-                
-                // Add formats returned from server
-                data.formats.forEach(f => {
-                    const h = (f && typeof f === 'object') ? f.height : f;
-                    const sizeStr = (f && typeof f === 'object') ? f.size : null;
-                    
-                    let label = `${h}p (SD)`;
-                    if (h >= 2160) label = `${h}p (4K UHD)`;
-                    else if (h >= 1440) label = `${h}p (2K QHD)`;
-                    else if (h >= 1080) label = `${h}p (Full HD)`;
-                    else if (h >= 720) label = `${h}p (HD)`;
-                    
-                    if (sizeStr) {
-                        label += ` - ${sizeStr}`;
-                    }
-                    
-                    const option = document.createElement('option');
-                    option.value = h;
-                    option.textContent = label;
-                    qualitySelect.appendChild(option);
+                const optionsList = [];
+
+                // 1. Best Quality option
+                optionsList.push({
+                    value: 'best',
+                    name: 'Best Available Quality',
+                    badge: 'BEST',
+                    badgeClass: 'badge-4k',
+                    size: data.bestSize || null
                 });
 
-                // Always add best option and audio options
-                const bestOption = document.createElement('option');
-                bestOption.value = 'best';
-                bestOption.textContent = `Best Available Quality${data.bestSize ? ` - ${data.bestSize}` : ''}`;
-                qualitySelect.insertBefore(bestOption, qualitySelect.firstChild);
+                // 2. Individual video quality formats
+                if (data.formats && data.formats.length > 0) {
+                    data.formats.forEach(f => {
+                        const h = (f && typeof f === 'object') ? f.height : f;
+                        const sizeStr = (f && typeof f === 'object') ? f.size : null;
+                        if (!h || h === 'best') return;
 
-                const audioOption = document.createElement('option');
-                audioOption.value = 'audio';
-                audioOption.textContent = `Audio Only (MP3)${data.audioSize ? ` - ${data.audioSize}` : ''}`;
-                qualitySelect.appendChild(audioOption);
+                        let name = `${h}p`;
+                        let badge = `${h}p`;
+                        let badgeClass = 'badge-sd';
+
+                        if (h >= 2160) {
+                            name = `4K Ultra HD (${h}p)`;
+                            badge = '4K';
+                            badgeClass = 'badge-4k';
+                        } else if (h >= 1440) {
+                            name = `2K Quad HD (${h}p)`;
+                            badge = '2K';
+                            badgeClass = 'badge-2k';
+                        } else if (h >= 900) {
+                            name = `1080p (Full HD)`;
+                            badge = '1080p';
+                            badgeClass = 'badge-hd';
+                        } else if (h >= 600) {
+                            name = `720p (HD)`;
+                            badge = '720p';
+                            badgeClass = 'badge-hd';
+                        } else if (h >= 400) {
+                            name = `480p (SD)`;
+                            badge = '480p';
+                            badgeClass = 'badge-sd';
+                        } else if (h >= 300) {
+                            name = `360p (Medium)`;
+                            badge = '360p';
+                            badgeClass = 'badge-sd';
+                        } else if (h >= 200) {
+                            name = `240p (Low)`;
+                            badge = '240p';
+                            badgeClass = 'badge-sd';
+                        } else {
+                            name = `${h}p`;
+                            badge = `${h}p`;
+                            badgeClass = 'badge-sd';
+                        }
+
+                        optionsList.push({
+                            value: h,
+                            name: name,
+                            badge: badge,
+                            badgeClass: badgeClass,
+                            size: sizeStr
+                        });
+                    });
+                }
+
+                // 3. Audio Only (MP3)
+                optionsList.push({
+                    value: 'audio',
+                    name: 'Audio Only (MP3)',
+                    badge: 'MP3',
+                    badgeClass: 'badge-audio',
+                    size: data.audioSize || null
+                });
+
+                setupCustomQualityOptions(optionsList);
 
             } else {
                 // Non-YouTube (TikTok, Instagram, Facebook): Hide quality dropdown, show generic card size tag

@@ -161,14 +161,26 @@
 
                         <!-- Quality Selection Dropdown -->
                         <div id="quality-selector-block" class="quality-selector-container">
-                            <label for="quality-select" class="selector-label">Select Download Quality</label>
-                            <div class="select-wrapper">
-                                <select id="quality-select">
+                            <label class="selector-label">Select Download Quality</label>
+                            <div class="custom-select-wrapper" id="custom-quality-wrapper">
+                                <button type="button" class="custom-select-trigger" id="custom-quality-trigger" aria-haspopup="listbox" aria-expanded="false">
+                                    <div class="selected-quality-info">
+                                        <span class="quality-badge badge-hd" id="selected-quality-badge">HD</span>
+                                        <span class="selected-text" id="selected-quality-text">1080p (Full HD)</span>
+                                    </div>
+                                    <div class="selected-quality-meta">
+                                        <span class="selected-size-pill" id="selected-quality-size">Loading...</span>
+                                        <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                            <polyline points="6 9 12 15 18 9"></polyline>
+                                        </svg>
+                                    </div>
+                                </button>
+                                <div class="custom-select-options hidden" id="custom-quality-options" role="listbox">
                                     <!-- Populated dynamically -->
+                                </div>
+                                <select id="quality-select" style="display: none;">
+                                    <!-- Populated dynamically for fallback/state -->
                                 </select>
-                                <svg class="select-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="6 9 12 15 18 9"></polyline>
-                                </svg>
                             </div>
                         </div>
 
