@@ -1021,7 +1021,21 @@ router.post('/api/mediafetch/info', async (req, res) => {
         ? null 
         : (parsedData.filesize || parsedData.filesize_approx || (bestFormat ? (bestFormat.filesize || bestFormat.filesize_approx) : 0));
 
-      // Resolve size remotely if missing
+      // For non-YouTube (Instagram, TikTok, Facebook): aggressively resolve size
+      if (!bestSizeVal && platform !== 'youtube' && parsedData.formats) {
+        // Prefer a progressive format (has both video + audio) for accurate size
+        const progressiveFormat = parsedData.formats.find(f => 
+          f.url && f.vcodec !== 'none' && f.acodec !== 'none'
+        ) || parsedData.formats.find(f =>
+          f.url && f.ext === 'mp4' && !f.format_id?.startsWith('dash')
+        );
+        const sizeProbeFormat = progressiveFormat || bestFormat;
+        if (sizeProbeFormat && sizeProbeFormat.url) {
+          bestSizeVal = await getRemoteFileSize(sizeProbeFormat.url);
+        }
+      }
+
+      // Fallback: resolve size remotely for any platform if still missing
       if (!bestSizeVal && bestFormat && bestFormat.url && formatOptions.length === 0) {
         bestSizeVal = await getRemoteFileSize(bestFormat.url);
       }
@@ -1043,13 +1057,24 @@ router.post('/api/mediafetch/info', async (req, res) => {
         thumbnail = parsedData.thumbnail;
       }
 
+      // Try to get duration from formats if top-level is missing (e.g. Instagram)
+      let mediaDuration = parsedData.duration;
+      if (!mediaDuration && parsedData.formats) {
+        const fmtWithDuration = parsedData.formats.find(f => f.duration);
+        if (fmtWithDuration) mediaDuration = fmtWithDuration.duration;
+      }
+
+      // For Instagram, the best format is often a video-only dash stream.
+      // Don't include its direct URL — force download through yt-dlp to merge audio+video.
+      const canDirectDownload = bestFormat && bestFormat.url && bestFormat.acodec !== 'none' && platform !== 'instagram';
+
       res.json({
         title: parsedData.title || 'Media File',
         thumbnail: thumbnail,
-        duration: formatDuration(parsedData.duration),
+        duration: mediaDuration ? formatDuration(mediaDuration) : null,
         uploader: parsedData.uploader || parsedData.channel || 'Unknown',
         platform: platform,
-        formats: platform === 'youtube' ? formatOptions : (bestFormat && bestFormat.url ? [{ height: 'best', size: formatSize(bestSizeVal), url: bestFormat.url }] : [{ height: 'best', size: formatSize(bestSizeVal) }]),
+        formats: platform === 'youtube' ? formatOptions : (canDirectDownload ? [{ height: 'best', size: formatSize(bestSizeVal), url: bestFormat.url }] : [{ height: 'best', size: formatSize(bestSizeVal) }]),
         audioSize: formatSize(bestAudioSize),
         bestSize: finalBestSizeStr,
         images: images.length > 0 ? images : null
@@ -1110,6 +1135,11 @@ router.post('/api/mediafetch/download', async (req, res) => {
       let formatSelector = 'bestvideo+bestaudio/best';
       if (platform === 'youtube' && quality && quality !== 'best') {
         formatSelector = `bestvideo[height<=${quality}]+bestaudio/best`;
+      } else if (platform === 'instagram' || platform === 'tiktok' || platform === 'facebook') {
+        // For Instagram: dash formats have vp9 video-only + separate m4a audio.
+        // Progressive formats (IDs 1,2,3) have both but codecs show as undefined.
+        // Use bestvideo*+bestaudio to merge, falling back to best progressive with audio.
+        formatSelector = 'bestvideo*+bestaudio/best[acodec!=none]/best';
       }
       args.push(
         '-f', formatSelector,

@@ -284,7 +284,13 @@ document.addEventListener('DOMContentLoaded', () => {
             videoThumbnail.referrerPolicy = 'no-referrer';
             videoTitle.textContent = data.title;
             videoUploader.textContent = data.uploader;
-            videoDuration.textContent = data.duration;
+            if (data.duration) {
+                videoDuration.textContent = data.duration;
+                videoDuration.style.display = '';
+            } else {
+                videoDuration.textContent = '';
+                videoDuration.style.display = 'none';
+            }
             videoPlatformLabel.textContent = data.platform.toUpperCase();
 
             // Populate selectors and display sizes depending on YouTube vs non-YouTube
