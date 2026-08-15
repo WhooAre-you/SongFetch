@@ -53,7 +53,8 @@ async function ensureYtDlp(force = false) {
     const response = await axios({
       method: 'GET',
       url: url,
-      responseType: 'stream'
+      responseType: 'stream',
+      maxRedirects: 10
     });
 
     const tempBinaryPath = `${ytDlpPath}.tmp`;
