@@ -29,6 +29,7 @@ function execFile(binary, args, options, callback) {
         errMsg.toLowerCase().includes('signature') ||
         errMsg.toLowerCase().includes('unsupported client') ||
         errMsg.toLowerCase().includes('sign in to confirm') ||
+        errMsg.toLowerCase().includes('python3') ||
         errMsg.toLowerCase().includes('confirm you are on the latest version')
       );
 

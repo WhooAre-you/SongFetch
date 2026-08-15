@@ -42,7 +42,7 @@ async function ensureYtDlp(force = false) {
   }
   
   console.log('Downloading latest yt-dlp binary...');
-  let url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
+  let url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
   if (isWindows) {
     url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe';
   } else if (process.platform === 'darwin') {
