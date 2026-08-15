@@ -1270,15 +1270,29 @@ router.get('/api/mediafetch/diagnose', async (req, res) => {
     const binary = await ensureYtDlp();
     const stats = fs.statSync(binary);
     
-    execFile(binary, ['--version'], (err, stdout, stderr) => {
-      res.json({
-        platform: process.platform,
-        binaryPath: binary,
-        exists: fs.existsSync(binary),
-        size: stats.size,
-        version: err ? `Error getting version: ${err.message}` : stdout.trim(),
-        stderr: stderr || null
-      });
+    const url = 'https://youtu.be/624VP_CCRrs';
+    execFile(binary, ['--extractor-args', 'youtube:skip=webpage;player_client=android_vr', '--no-cache-dir', '-J', '--no-playlist', url], (err, stdout, stderr) => {
+      if (err) {
+        return res.json({ error: err.message, stderr: stderr || null });
+      }
+      try {
+        const data = JSON.parse(stdout);
+        const formats = data.formats.map(f => ({
+          format_id: f.format_id,
+          ext: f.ext,
+          height: f.height,
+          vcodec: f.vcodec,
+          acodec: f.acodec,
+          filesize: f.filesize || f.filesize_approx || null
+        }));
+        res.json({
+          title: data.title,
+          formatsCount: formats.length,
+          formats: formats.slice(0, 10)
+        });
+      } catch (parseErr) {
+        res.json({ error: 'Parse error: ' + parseErr.message, stdout: stdout.substring(0, 500) });
+      }
     });
   } catch (e) {
     res.status(500).json({ error: e.message });
