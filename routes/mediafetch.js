@@ -1263,4 +1263,26 @@ router.post('/api/mediafetch/download-direct', async (req, res) => {
   }
 });
 
+router.get('/api/mediafetch/diagnose', async (req, res) => {
+  try {
+    const { ensureYtDlp } = require('../utils/ytDlp');
+    const { execFile } = require('child_process');
+    const binary = await ensureYtDlp();
+    const stats = fs.statSync(binary);
+    
+    execFile(binary, ['--version'], (err, stdout, stderr) => {
+      res.json({
+        platform: process.platform,
+        binaryPath: binary,
+        exists: fs.existsSync(binary),
+        size: stats.size,
+        version: err ? `Error getting version: ${err.message}` : stdout.trim(),
+        stderr: stderr || null
+      });
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;
