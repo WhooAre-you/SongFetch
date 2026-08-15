@@ -133,7 +133,7 @@ function getYtDlpArgs(customArgs = []) {
   const baseArgs = [
     '--no-cache-dir',
     '--js-runtimes', 'node',
-    '--extractor-args', 'youtube:skip=webpage;player_client=android_vr'
+    '--extractor-args', 'youtube:player_client=android'
   ];
 
   const cookiesFile = getCookiesPath();

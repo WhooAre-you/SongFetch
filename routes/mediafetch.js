@@ -526,7 +526,7 @@ router.post('/api/mediafetch/info', async (req, res) => {
 
     const ytDlpBinary = await ensureYtDlp();
     const args = [
-      '--extractor-args', 'youtube:skip=webpage;player_client=android_vr',
+      '--extractor-args', 'youtube:player_client=android',
       '--js-runtimes', 'node',
       '--no-cache-dir',
       '-J',
