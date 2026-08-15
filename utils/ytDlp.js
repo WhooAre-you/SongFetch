@@ -16,7 +16,7 @@ const ytDlpFileName = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
 const ytDlpPath = path.join(binDir, ytDlpFileName);
 
 // Download yt-dlp dynamically if not present
-async function ensureYtDlp() {
+async function ensureYtDlp(force = false) {
   if (!fs.existsSync(binDir)) {
     fs.mkdirSync(binDir, { recursive: true });
   }
@@ -24,7 +24,7 @@ async function ensureYtDlp() {
   const ONE_DAY_MS = 24 * 60 * 60 * 1000;
   let needsDownload = true;
 
-  if (fs.existsSync(ytDlpPath)) {
+  if (fs.existsSync(ytDlpPath) && !force) {
     try {
       const stats = fs.statSync(ytDlpPath);
       const isRecent = (Date.now() - stats.mtimeMs) < ONE_DAY_MS;
@@ -170,8 +170,49 @@ function formatSize(bytes) {
   return `${mb.toFixed(1)} MB`;
 }
 
+const { execFile } = require('child_process');
+
+async function execYtDlp(args, options = {}) {
+  let binary = await ensureYtDlp();
+  const maxBuffer = options.maxBuffer || (1024 * 1024 * 50);
+  
+  return new Promise((resolve, reject) => {
+    execFile(binary, args, { ...options, maxBuffer }, async (error, stdout, stderr) => {
+      if (error) {
+        const errMsg = (stderr || '') + (error.message || '');
+        const needsUpdate = errMsg.toLowerCase().includes('update') || 
+                            errMsg.toLowerCase().includes('latest version') || 
+                            errMsg.toLowerCase().includes('unexpected response') ||
+                            errMsg.toLowerCase().includes('signature') ||
+                            errMsg.toLowerCase().includes('confirm you are on the latest version');
+        if (needsUpdate) {
+          console.log('Detected yt-dlp error/outdated warning. Forcing self-update...');
+          try {
+            binary = await ensureYtDlp(true);
+            console.log('yt-dlp updated successfully. Retrying command...');
+            execFile(binary, args, { ...options, maxBuffer }, (retryErr, retryStdout, retryStderr) => {
+              if (retryErr) {
+                reject({ error: retryErr, stderr: retryStderr, stdout: retryStdout });
+              } else {
+                resolve(retryStdout);
+              }
+            });
+            return;
+          } catch (updateErr) {
+            console.error('Failed to update yt-dlp on error fallback:', updateErr.message);
+          }
+        }
+        reject({ error, stderr, stdout });
+      } else {
+        resolve(stdout);
+      }
+    });
+  });
+}
+
 module.exports = {
   ensureYtDlp,
+  execYtDlp,
   getYtDlpArgs,
   ytDlpPath,
   tempDir,

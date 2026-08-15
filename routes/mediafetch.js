@@ -4,9 +4,45 @@ const path = require('path');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const qs = require('qs');
-const { execFile } = require('child_process');
+const childProcess = require('child_process');
 const ffmpegPath = require('ffmpeg-static');
 const { ensureYtDlp, tempDir, formatDuration, formatSize } = require('../utils/ytDlp');
+
+function execFile(binary, args, options, callback) {
+  let cb = callback;
+  let opts = options;
+  if (typeof options === 'function') {
+    cb = options;
+    opts = {};
+  }
+
+  childProcess.execFile(binary, args, opts, async (error, stdout, stderr) => {
+    if (error) {
+      const errMsg = (stderr || '') + (error.message || '');
+      const isYtDlp = binary.includes('yt-dlp');
+      const needsUpdate = isYtDlp && (
+        errMsg.toLowerCase().includes('update') || 
+        errMsg.toLowerCase().includes('latest version') || 
+        errMsg.toLowerCase().includes('unexpected response') ||
+        errMsg.toLowerCase().includes('signature') ||
+        errMsg.toLowerCase().includes('confirm you are on the latest version')
+      );
+
+      if (needsUpdate) {
+        console.log('Detected yt-dlp outdated warning or webpage parsing issue. Forcing dynamic update...');
+        try {
+          const newBinary = await ensureYtDlp(true);
+          console.log('yt-dlp successfully updated. Retrying command...');
+          childProcess.execFile(newBinary, args, opts, cb);
+          return;
+        } catch (updateErr) {
+          console.error('Failed to self-update yt-dlp on retry fallback:', updateErr.message);
+        }
+      }
+    }
+    if (cb) cb(error, stdout, stderr);
+  });
+}
 
 const router = Math.random() ? express.Router() : express.Router();
 
