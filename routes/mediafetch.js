@@ -27,6 +27,8 @@ function execFile(binary, args, options, callback) {
         errMsg.toLowerCase().includes('latest version') || 
         errMsg.toLowerCase().includes('unexpected response') ||
         errMsg.toLowerCase().includes('signature') ||
+        errMsg.toLowerCase().includes('unsupported client') ||
+        errMsg.toLowerCase().includes('sign in to confirm') ||
         errMsg.toLowerCase().includes('confirm you are on the latest version')
       );
 

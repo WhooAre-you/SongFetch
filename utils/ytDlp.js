@@ -45,8 +45,6 @@ async function ensureYtDlp(force = false) {
   let url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp';
   if (isWindows) {
     url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe';
-  } else if (process.platform === 'linux') {
-    url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
   } else if (process.platform === 'darwin') {
     url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos';
   }
