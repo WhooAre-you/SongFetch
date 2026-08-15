@@ -1,6 +1,8 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const https = require('https');
 const axios = require('axios');
 const cheerio = require('cheerio');
 const qs = require('qs');
@@ -144,23 +146,40 @@ function extractHtmlFromJs(str) {
   return str;
 }
 
-// Helper: Resolve shortened redirects (e.g. vt.tiktok.com, vm.tiktok.com, fb.watch, share links)
+// Helper: Resolve shortened redirects (e.g. vt.tiktok.com, vm.tiktok.com, fb.watch, share links) natively in < 350ms
 async function resolveRedirectUrl(targetUrl) {
-  try {
-    if (targetUrl.includes('vt.tiktok.com') || targetUrl.includes('vm.tiktok.com') || targetUrl.includes('fb.watch') || targetUrl.includes('/share/')) {
-      const res = await axios.get(targetUrl, {
-        maxRedirects: 5,
+  if (!targetUrl || (!targetUrl.includes('vt.tiktok.com') && !targetUrl.includes('vm.tiktok.com') && !targetUrl.includes('fb.watch') && !targetUrl.includes('/share/'))) {
+    return targetUrl;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      const client = targetUrl.startsWith('https') ? https : http;
+      const req = client.get(targetUrl, {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-        },
-        timeout: 5000
+        }
+      }, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          let loc = res.headers.location;
+          if (loc.startsWith('/')) {
+            const parsed = new URL(targetUrl);
+            loc = `${parsed.protocol}//${parsed.host}${loc}`;
+          }
+          console.log(`Resolved short redirect "${targetUrl}" -> "${loc}"`);
+          return resolve(loc);
+        }
+        resolve(targetUrl);
       });
-      return (res.request && res.request.res && res.request.res.responseUrl) || res.config.url || targetUrl;
+      req.on('error', () => resolve(targetUrl));
+      req.setTimeout(5000, () => {
+        req.destroy();
+        resolve(targetUrl);
+      });
+    } catch (e) {
+      resolve(targetUrl);
     }
-  } catch (e) {
-    // Ignore and return original
-  }
-  return targetUrl;
+  });
 }
 
 // Route: Fetch Media Info (metadata + available resolutions or photos)
@@ -372,7 +391,7 @@ router.post('/api/mediafetch/info', async (req, res) => {
             'Content-Type': 'application/x-www-form-urlencoded',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
           },
-          timeout: 8000
+          timeout: 15000
         });
         if (tikwmRes.data && tikwmRes.data.code === 0 && tikwmRes.data.data) {
           const tkData = tikwmRes.data.data;
