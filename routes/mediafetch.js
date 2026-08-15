@@ -523,7 +523,7 @@ router.post('/api/mediafetch/info', async (req, res) => {
 
     const ytDlpBinary = await ensureYtDlp();
     const args = [
-      '--extractor-args', 'youtube:player_client=android_vr',
+      '--extractor-args', 'youtube:player_client=android_vr,android;skip=webpage',
       '--js-runtimes', 'node',
       '--no-cache-dir',
       '-J',
@@ -1055,7 +1055,7 @@ router.post('/api/mediafetch/download', async (req, res) => {
     console.log(`Starting media download using yt-dlp for: ${url} (Quality: ${quality})`);
 
     let args = [
-      '--extractor-args', 'youtube:player_client=android_vr',
+      '--extractor-args', 'youtube:player_client=android_vr,android;skip=webpage',
       '--js-runtimes', 'node',
       '--no-cache-dir',
       '--ffmpeg-location', ffmpegDir
