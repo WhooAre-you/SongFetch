@@ -296,16 +296,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 const optionsList = [];
 
-                // 1. Best Quality option
-                optionsList.push({
-                    value: 'best',
-                    name: 'Best Available Quality',
-                    badge: 'BEST',
-                    badgeClass: 'badge-4k',
-                    size: data.bestSize || null
-                });
-
-                // 2. Individual video quality formats
+                // Video quality formats
                 if (data.formats && data.formats.length > 0) {
                     data.formats.forEach(f => {
                         const h = (f && typeof f === 'object') ? f.height : f;
