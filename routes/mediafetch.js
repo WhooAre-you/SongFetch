@@ -523,7 +523,7 @@ router.post('/api/mediafetch/info', async (req, res) => {
 
     const ytDlpBinary = await ensureYtDlp();
     const args = [
-      '--extractor-args', 'youtube:player_client=android_vr,android;skip=webpage',
+      '--extractor-args', 'youtube:player_client=android_vr;skip=webpage',
       '--js-runtimes', 'node',
       '--no-cache-dir',
       '-J',
@@ -951,12 +951,13 @@ router.post('/api/mediafetch/info', async (req, res) => {
       if (parsedData.formats) {
         const audioFormats = parsedData.formats.filter(f => f.vcodec === 'none' && f.acodec !== 'none');
         if (audioFormats.length > 0) {
-          audioFormats.sort((a, b) => (b.tbr || 0) - (a.tbr || 0));
-          const bestAudio = audioFormats.find(f => f.filesize || f.filesize_approx) || audioFormats[0];
-          bestAudioSize = bestAudio.filesize || bestAudio.filesize_approx || 0;
+          const standardAudio = audioFormats.find(f => f.ext === 'm4a' || (f.acodec && f.acodec.includes('mp4a'))) || audioFormats[0];
+          bestAudioSize = standardAudio.filesize || standardAudio.filesize_approx || 0;
           
-          if (!bestAudioSize && bestAudio.tbr && parsedData.duration) {
-            bestAudioSize = Math.round((bestAudio.tbr * 1000 / 8) * parsedData.duration);
+          if (!bestAudioSize && standardAudio.tbr && parsedData.duration) {
+            bestAudioSize = Math.round((standardAudio.tbr * 1000 / 8) * parsedData.duration);
+          } else if (!bestAudioSize && standardAudio.abr && parsedData.duration) {
+            bestAudioSize = Math.round((standardAudio.abr * 1000 / 8) * parsedData.duration);
           }
         }
       }
@@ -964,15 +965,16 @@ router.post('/api/mediafetch/info', async (req, res) => {
       const formatOptions = resolutions.map(h => {
         let videoSize = 0;
         if (parsedData.formats) {
-          const videoForHeight = parsedData.formats
-            .filter(f => f.height === h && f.vcodec !== 'none')
-            .sort((a, b) => (b.tbr || 0) - (a.tbr || 0));
+          const videoForHeight = parsedData.formats.filter(f => f.height === h && f.vcodec !== 'none');
           if (videoForHeight.length > 0) {
-            const chosenVideo = videoForHeight.find(f => f.filesize || f.filesize_approx) || videoForHeight[0];
-            videoSize = chosenVideo.filesize || chosenVideo.filesize_approx || 0;
+            // Pick standard MP4 or modern stream to avoid massive over-estimates
+            const standardVideo = videoForHeight.find(f => f.ext === 'mp4' && (f.vcodec.startsWith('avc1') || f.vcodec.startsWith('av01'))) || videoForHeight[0];
+            videoSize = standardVideo.filesize || standardVideo.filesize_approx || 0;
             
-            if (!videoSize && chosenVideo.tbr && parsedData.duration) {
-              videoSize = Math.round((chosenVideo.tbr * 1000 / 8) * parsedData.duration);
+            if (!videoSize && standardVideo.tbr && parsedData.duration) {
+              videoSize = Math.round((standardVideo.tbr * 1000 / 8) * parsedData.duration);
+            } else if (!videoSize && standardVideo.vbr && parsedData.duration) {
+              videoSize = Math.round((standardVideo.vbr * 1000 / 8) * parsedData.duration);
             }
           }
         }
@@ -984,15 +986,20 @@ router.post('/api/mediafetch/info', async (req, res) => {
       });
 
       const bestFormat = parsedData.formats ? parsedData.formats.sort((a, b) => (b.tbr || 0) - (a.tbr || 0))[0] : null;
-      let bestSizeVal = parsedData.filesize || parsedData.filesize_approx || (bestFormat ? (bestFormat.filesize || bestFormat.filesize_approx) : 0);
+      let bestSizeVal = (formatOptions.length > 0 && formatOptions[0].size !== 'Unknown size') 
+        ? null 
+        : (parsedData.filesize || parsedData.filesize_approx || (bestFormat ? (bestFormat.filesize || bestFormat.filesize_approx) : 0));
 
       // Resolve size remotely if missing
-      if (!bestSizeVal && bestFormat && bestFormat.url) {
+      if (!bestSizeVal && bestFormat && bestFormat.url && formatOptions.length === 0) {
         bestSizeVal = await getRemoteFileSize(bestFormat.url);
       }
 
-      // Average size for photo slideshow
-      let finalBestSizeStr = formatSize(bestSizeVal);
+      // Average size for photo slideshow or best video
+      let finalBestSizeStr = (formatOptions.length > 0 && formatOptions[0].size !== 'Unknown size') 
+        ? formatOptions[0].size 
+        : formatSize(bestSizeVal);
+
       if (images.length > 0) {
         const photoSize = await getRemoteFileSize(images[0].url);
         finalBestSizeStr = photoSize ? `${formatSize(photoSize)} per photo` : 'Unknown size';
@@ -1055,7 +1062,7 @@ router.post('/api/mediafetch/download', async (req, res) => {
     console.log(`Starting media download using yt-dlp for: ${url} (Quality: ${quality})`);
 
     let args = [
-      '--extractor-args', 'youtube:player_client=android_vr,android;skip=webpage',
+      '--extractor-args', 'youtube:player_client=android_vr;skip=webpage',
       '--js-runtimes', 'node',
       '--no-cache-dir',
       '--ffmpeg-location', ffmpegDir
