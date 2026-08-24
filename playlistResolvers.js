@@ -1,11 +1,6 @@
 const path = require('path');
-const { execFile } = require('child_process');
-
-// Dynamic OS-specific yt-dlp path resolution
-const isWindows = process.platform === 'win32';
-const binDir = path.join(__dirname, 'bin');
-const ytDlpFileName = isWindows ? 'yt-dlp.exe' : 'yt-dlp';
-const ytDlpPath = path.join(binDir, ytDlpFileName);
+const childProcess = require('child_process');
+const { ensureYtDlp, getYtDlpArgs } = require('./utils/ytDlp');
 
 // Helper: pick the best thumbnail from an entry's thumbnail data
 function pickEntryThumbnail(entry, fallback) {
@@ -19,9 +14,11 @@ function pickEntryThumbnail(entry, fallback) {
 }
 
 // Run yt-dlp and return parsed JSON
-function runYtDlp(args) {
+async function runYtDlp(args) {
+  const binary = await ensureYtDlp();
+  const finalArgs = getYtDlpArgs(args);
   return new Promise((resolve, reject) => {
-    execFile(ytDlpPath, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
+    childProcess.execFile(binary, finalArgs, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
       if (error) reject(new Error(stderr || error.message));
       else resolve(stdout);
     });
@@ -38,8 +35,6 @@ async function resolveYouTubePlaylist(url) {
     if (!playlistId) throw new Error('Invalid YouTube playlist URL');
 
     const args = [
-      '--extractor-args', 'youtube:player_client=mweb,android',
-      '--no-cache-dir',
       '--flat-playlist',
       '-J',
       url
@@ -87,7 +82,6 @@ async function resolveSoundCloudPlaylist(url) {
     console.log(`Resolving SoundCloud Playlist URL: ${url}`);
 
     const args = [
-      '--no-cache-dir',
       '--flat-playlist',
       '-J',
       url
@@ -149,7 +143,6 @@ async function resolveSpotifyPlaylist(url) {
     if (!playlistId) throw new Error('Invalid Spotify playlist URL');
 
     const args = [
-      '--no-cache-dir',
       '--flat-playlist',
       '-J',
       url
