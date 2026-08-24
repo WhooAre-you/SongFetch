@@ -640,6 +640,11 @@ document.addEventListener('DOMContentLoaded', () => {
             const percent = Math.round(((i + 1) / total) * 100);
             playlistProgressFill.style.width = `${percent}%`;
             playlistProgressPercent.textContent = `${i + 1}/${total}`;
+
+            // Gentle delay between tracks to ensure stability
+            if (i < total - 1) {
+                await new Promise(r => setTimeout(r, 600));
+            }
         }
 
         playlistProgressStatus.textContent = `Finished! Successfully downloaded ${successCount} out of ${total} tracks.`;

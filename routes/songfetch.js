@@ -591,17 +591,48 @@ router.post('/api/download', async (req, res) => {
 
     console.log(`Starting audio download using yt-dlp for: ${downloadUrl}`);
     let downloadedPath = null;
+    let lastError = null;
 
-    try {
-      downloadedPath = await executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, downloadUrl);
-    } catch (primaryErr) {
-      console.warn('Primary download failed, trying SoundCloud fallback...', primaryErr.stderr || primaryErr.error.message);
-      const scFallbackUrl = `scsearch1:${artist} ${title}`;
+    const cleanTitle = (title || '')
+      .replace(/\[.*?\]/g, '')
+      .replace(/\(.*?\)/g, '')
+      .replace(/Official\s*(Music\s*)?Video/gi, '')
+      .replace(/Official\s*Audio/gi, '')
+      .replace(/Music\s*Video/gi, '')
+      .replace(/Lyric(s)?\s*Video/gi, '')
+      .replace(/ft\.[\w\s]+/gi, '')
+      .replace(/feat\.[\w\s]+/gi, '')
+      .replace(/prod\.[\w\s]+/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim() || title;
+
+    const candidates = [];
+    if (youtubeUrl && youtubeUrl.startsWith('http')) {
+      candidates.push({ label: 'Direct URL', url: youtubeUrl });
+    }
+    candidates.push({ label: 'SoundCloud Clean Search', url: `scsearch1:${artist} ${cleanTitle}` });
+    candidates.push({ label: 'YouTube Clean Search', url: `ytsearch1:${artist} - ${cleanTitle} (Official Audio)` });
+    if (cleanTitle !== title) {
+      candidates.push({ label: 'SoundCloud Full Title', url: `scsearch1:${artist} ${title}` });
+    }
+    candidates.push({ label: 'YouTube Full Search', url: `ytsearch1:${artist} ${title}` });
+
+    for (const candidate of candidates) {
       try {
-        downloadedPath = await executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, scFallbackUrl);
-      } catch (scErr) {
-        throw new Error(`Audio download failed: ${primaryErr.stderr || primaryErr.error.message}`);
+        console.log(`Attempting download via [${candidate.label}]: ${candidate.url}`);
+        downloadedPath = await executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, candidate.url);
+        if (downloadedPath && fs.existsSync(downloadedPath)) {
+          console.log(`Download succeeded via [${candidate.label}]`);
+          break;
+        }
+      } catch (candErr) {
+        console.warn(`[${candidate.label}] failed:`, candErr.stderr || candErr.error?.message || candErr.message || 'Unknown error');
+        lastError = candErr;
       }
+    }
+
+    if (!downloadedPath || !fs.existsSync(downloadedPath)) {
+      throw new Error(`Audio download failed after fallback attempts: ${lastError?.stderr || lastError?.error?.message || 'Track not available'}`);
     }
 
     console.log('yt-dlp finished download and mp3 conversion.');
