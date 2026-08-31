@@ -47,7 +47,7 @@ async function ensureYtDlp(force = false) {
   }
   
   console.log('Downloading latest yt-dlp binary...');
-  let url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux';
+  let url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_musllinux';
   if (isWindows) {
     url = 'https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe';
   } else if (process.platform === 'darwin') {
@@ -76,12 +76,15 @@ async function ensureYtDlp(force = false) {
           }
 
           if (!isWindows) {
-            fs.chmodSync(tempBinaryPath, 0o755);
+            try { fs.chmodSync(tempBinaryPath, 0o755); } catch (e) {}
           }
           if (fs.existsSync(ytDlpPath)) {
-            fs.unlinkSync(ytDlpPath);
+            try { fs.unlinkSync(ytDlpPath); } catch (e) {}
           }
           fs.renameSync(tempBinaryPath, ytDlpPath);
+          if (!isWindows) {
+            try { fs.chmodSync(ytDlpPath, 0o755); } catch (e) {}
+          }
           console.log(`yt-dlp downloaded and updated at: ${ytDlpPath}`);
           resolve(ytDlpPath);
         } catch (err) {
