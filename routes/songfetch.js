@@ -874,4 +874,15 @@ router.get('/api/songfetch/stream', async (req, res) => {
   }
 });
 
+// Route: Manually force update yt-dlp binary to latest GitHub release
+router.get('/api/admin/update-ytdlp', async (req, res) => {
+  try {
+    console.log('Manual update requested for yt-dlp binary...');
+    const binary = await ensureYtDlp(true);
+    res.json({ success: true, message: 'yt-dlp binary successfully updated to latest release!', binaryPath: binary });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update yt-dlp binary', details: err.message });
+  }
+});
+
 module.exports = router;
