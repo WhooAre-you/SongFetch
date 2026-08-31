@@ -107,11 +107,33 @@ function getCookiesPath() {
   
   if (envCookies) {
     try {
-      let content = envCookies;
-      if (!envCookies.includes('Netscape') && !envCookies.includes('youtube.com')) {
-        // Base64 encoded
-        content = Buffer.from(envCookies, 'base64').toString('utf-8');
+      let content = envCookies.trim();
+      
+      // Strip surrounding quotes if present from .env parsing
+      if ((content.startsWith('"') && content.endsWith('"')) || (content.startsWith("'") && content.endsWith("'"))) {
+        content = content.slice(1, -1);
       }
+
+      // Check if base64 encoded
+      if (!content.includes('Netscape') && !content.includes('youtube.com') && !content.includes('\t')) {
+        try {
+          const decoded = Buffer.from(content, 'base64').toString('utf-8');
+          if (decoded.includes('youtube.com') || decoded.includes('\t')) {
+            content = decoded;
+          }
+        } catch (_) {}
+      }
+
+      // Convert literal "\n" escape sequences to real newlines if pasted as single-line string
+      if (content.includes('\\n') && !content.includes('\n')) {
+        content = content.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
+      }
+
+      // Ensure Netscape header exists
+      if (!content.startsWith('# Netscape HTTP Cookie File')) {
+        content = `# Netscape HTTP Cookie File\n${content}`;
+      }
+
       fs.writeFileSync(cookiesPath, content, 'utf-8');
       return cookiesPath;
     } catch (e) {
