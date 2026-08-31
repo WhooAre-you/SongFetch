@@ -10,8 +10,8 @@ RUN npm ci --only=production
 
 COPY . .
 
-EXPOSE 3000
-
-ENV PORT=3000
+# Hugging Face Spaces uses port 7860 by default
+EXPOSE 7860
+ENV PORT=7860
 
 CMD ["node", "server.js"]
