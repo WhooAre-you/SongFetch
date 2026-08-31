@@ -593,29 +593,44 @@ router.post('/api/download', async (req, res) => {
     let downloadedPath = null;
     let lastError = null;
 
-    const cleanTitle = (title || '')
+    const cleanArtist = (artist || '')
+      .replace(/\s*-\s*Topic$/i, '')
+      .replace(/Official(\s*Channel)?$/i, '')
+      .replace(/VEVO$/i, '')
+      .trim() || artist;
+
+    let cleanTitle = (title || '')
       .replace(/\[.*?\]/g, '')
       .replace(/\(.*?\)/g, '')
+      .replace(/@\w+/g, '')
       .replace(/Official\s*(Music\s*)?Video/gi, '')
       .replace(/Official\s*Audio/gi, '')
       .replace(/Music\s*Video/gi, '')
       .replace(/Lyric(s)?\s*Video/gi, '')
-      .replace(/ft\.[\w\s]+/gi, '')
-      .replace(/feat\.[\w\s]+/gi, '')
-      .replace(/prod\.[\w\s]+/gi, '')
+      .replace(/ft\.[\w\s\u0600-\u06FF]+/gi, '')
+      .replace(/feat\.[\w\s\u0600-\u06FF]+/gi, '')
+      .replace(/prod\.[\w\s\u0600-\u06FF]+/gi, '')
       .replace(/\s+/g, ' ')
       .trim() || title;
+
+    if (cleanTitle.includes(' - ')) {
+      const parts = cleanTitle.split(' - ').map(p => p.trim()).filter(Boolean);
+      const nonArtistParts = parts.filter(p => p.toLowerCase() !== cleanArtist.toLowerCase() && p.toLowerCase() !== (artist || '').toLowerCase());
+      if (nonArtistParts.length > 0) {
+        cleanTitle = nonArtistParts[0];
+      }
+    }
 
     const candidates = [];
     if (youtubeUrl && youtubeUrl.startsWith('http')) {
       candidates.push({ label: 'Direct URL', url: youtubeUrl });
     }
-    candidates.push({ label: 'SoundCloud Clean Search', url: `scsearch1:${artist} ${cleanTitle}` });
-    candidates.push({ label: 'YouTube Clean Search', url: `ytsearch1:${artist} - ${cleanTitle} (Official Audio)` });
+    candidates.push({ label: 'SoundCloud Clean Search', url: `scsearch1:${cleanArtist} ${cleanTitle}` });
+    candidates.push({ label: 'YouTube Clean Search', url: `ytsearch1:${cleanArtist} - ${cleanTitle} (Official Audio)` });
     if (cleanTitle !== title) {
-      candidates.push({ label: 'SoundCloud Full Title', url: `scsearch1:${artist} ${title}` });
+      candidates.push({ label: 'SoundCloud Full Title', url: `scsearch1:${cleanArtist} ${title}` });
     }
-    candidates.push({ label: 'YouTube Full Search', url: `ytsearch1:${artist} ${title}` });
+    candidates.push({ label: 'YouTube Full Search', url: `ytsearch1:${cleanArtist} ${title}` });
 
     for (const candidate of candidates) {
       try {
