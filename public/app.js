@@ -543,77 +543,87 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Download a single track from playlist list
-    async function downloadPlaylistTrack(track, btnElement) {
+    // Download a single track from playlist list (with automatic retry)
+    async function downloadPlaylistTrack(track, btnElement, maxRetries = 2) {
         if (btnElement.classList.contains('downloading') || btnElement.classList.contains('success')) return;
 
         btnElement.classList.add('downloading');
+        btnElement.classList.remove('error');
         btnElement.disabled = true;
         btnElement.innerHTML = `<span class="spinner-mini"></span>`;
 
-        try {
-            const response = await fetch(`${API_BASE}/api/download`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(track)
-            });
+        for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+            try {
+                const response = await fetch(`${API_BASE}/api/download`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(track)
+                });
 
-            if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.error || 'Server error');
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error || `Server error (${response.status})`);
+                }
+
+                const reader = response.body.getReader();
+                const contentLength = response.headers.get('content-length');
+                const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+                let loadedBytes = 0;
+                const chunks = [];
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    chunks.push(value);
+                    loadedBytes += value.length;
+                }
+
+                const blob = new Blob(chunks, { type: 'audio/mpeg' });
+                const blobUrl = URL.createObjectURL(blob);
+                
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                
+                const safeFilename = `${track.artist} - ${track.title}.mp3`
+                    .replace(/[\\/:*?"<>|]/g, '_');
+                
+                a.download = safeFilename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(blobUrl);
+
+                btnElement.classList.remove('downloading');
+                btnElement.classList.add('success');
+                btnElement.innerHTML = `
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                `;
+                return true;
+            } catch (error) {
+                console.warn(`Track download attempt ${attempt} failed for "${track.title}":`, error.message);
+                if (attempt <= maxRetries) {
+                    // Small delay before retry
+                    await new Promise(r => setTimeout(r, 1200));
+                } else {
+                    console.error('All download attempts failed:', error);
+                    btnElement.classList.remove('downloading');
+                    btnElement.classList.add('error');
+                    btnElement.disabled = false;
+                    btnElement.innerHTML = `
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    `;
+                    return false;
+                }
             }
-
-            const reader = response.body.getReader();
-            const contentLength = response.headers.get('content-length');
-            const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
-            let loadedBytes = 0;
-            const chunks = [];
-
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                chunks.push(value);
-                loadedBytes += value.length;
-            }
-
-            const blob = new Blob(chunks, { type: 'audio/mpeg' });
-            const blobUrl = URL.createObjectURL(blob);
-            
-            const a = document.createElement('a');
-            a.href = blobUrl;
-            
-            const safeFilename = `${track.artist} - ${track.title}.mp3`
-                .replace(/[\\/:*?"<>|]/g, '_');
-            
-            a.download = safeFilename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(blobUrl);
-
-            btnElement.classList.remove('downloading');
-            btnElement.classList.add('success');
-            btnElement.innerHTML = `
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="20 6 9 17 4 12"></polyline>
-                </svg>
-            `;
-            return true;
-        } catch (error) {
-            console.error('Track download error:', error);
-            btnElement.classList.remove('downloading');
-            btnElement.classList.add('error');
-            btnElement.disabled = false;
-            btnElement.innerHTML = `
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                </svg>
-            `;
-            return false;
         }
+        return false;
     }
 
     // Download all playlist tracks sequentially
