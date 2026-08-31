@@ -20,3 +20,5 @@ jobs:
         username: ${{ secrets.FTP_USERNAME }}
         password: ${{ secrets.FTP_PASSWORD }}
         server-dir: /htdocs/  # Must go into htdocs for InfinityFree
+        local-dir: ./public/
+
