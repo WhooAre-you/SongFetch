@@ -194,6 +194,9 @@ router.post('/api/mediafetch/info', async (req, res) => {
 
   // Auto-resolve shortened redirects
   url = await resolveRedirectUrl(url);
+  if (url.includes('instagram.com/reels/')) {
+    url = url.replace('instagram.com/reels/', 'instagram.com/reel/');
+  }
 
   let platform = 'unknown';
   const urlLower = url.toLowerCase();
