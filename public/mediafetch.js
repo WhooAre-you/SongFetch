@@ -1,4 +1,4 @@
-const API_BASE = window.API_BASE_URL || (window.location.hostname.includes('ct.ws') || window.location.hostname.includes('infinityfree') ? 'https://song-fetch.vercel.app' : '');
+const API_BASE = window.API_BASE_URL || (window.location.hostname.includes('ct.ws') || window.location.hostname.includes('infinityfree') ? 'https://songfetch.onrender.com' : '');
 
 document.addEventListener('DOMContentLoaded', () => {
     const searchForm = document.getElementById('search-form');
