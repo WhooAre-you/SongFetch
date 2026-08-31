@@ -567,7 +567,7 @@ router.post('/api/search', async (req, res) => {
 async function executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, targetUrl) {
   const finalMp3Path = path.join(tempDir, `${tempId}.mp3`);
   const args = getYtDlpArgs([
-    '-f', '140/ba[ext=m4a]/ba/b',
+    '-f', 'ba/b/18/best',
     '--concurrent-fragments', '4',
     '--buffer-size', '16K',
     '-x',
