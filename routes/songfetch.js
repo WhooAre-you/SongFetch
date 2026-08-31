@@ -545,11 +545,13 @@ router.post('/api/search', async (req, res) => {
   }
 });
 
-// Helper to execute audio download via yt-dlp with fallback
+// Helper to execute audio download via yt-dlp with optimized speed & fallback
 async function executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, targetUrl) {
   const finalMp3Path = path.join(tempDir, `${tempId}.mp3`);
   const args = getYtDlpArgs([
-    '-f', 'ba/b',
+    '-f', '140/ba[ext=m4a]/ba/b',
+    '--concurrent-fragments', '4',
+    '--buffer-size', '16K',
     '-x',
     '--audio-format', 'mp3',
     '--audio-quality', '5',
@@ -580,6 +582,21 @@ router.post('/api/download', async (req, res) => {
   const tempId = `song_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
   const finalMp3Path = path.join(tempDir, `${tempId}.mp3`);
   
+  // Start downloading cover art in PARALLEL with audio download to save time
+  const coverArtPromise = (async () => {
+    if (!artwork) return null;
+    try {
+      const imgRes = await axios.get(artwork, { 
+        responseType: 'arraybuffer',
+        timeout: 6000
+      });
+      return Buffer.from(imgRes.data);
+    } catch (e) {
+      console.warn('Artwork download error:', e.message);
+      return null;
+    }
+  })();
+
   let downloadUrl = youtubeUrl;
   if (!downloadUrl) {
     downloadUrl = `ytsearch1:${artist} - ${title} (Official Audio)`;
@@ -657,16 +674,7 @@ router.post('/api/download', async (req, res) => {
       return res.status(500).json({ error: 'Converted MP3 file was not generated.' });
     }
 
-    let coverBuffer = null;
-    if (artwork) {
-      try {
-        console.log(`Downloading cover artwork: ${artwork}`);
-        const imageResponse = await axios.get(artwork, { responseType: 'arraybuffer' });
-        coverBuffer = Buffer.from(imageResponse.data);
-      } catch (imgError) {
-        console.warn('Failed to download cover art image:', imgError.message);
-      }
-    }
+    const coverBuffer = await coverArtPromise;
 
     console.log('Embedding ID3 tags (Title, Artist, Album, Cover art) into MP3...');
     const tags = {
