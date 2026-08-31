@@ -660,12 +660,12 @@ router.post('/api/download', async (req, res) => {
     if (youtubeUrl && youtubeUrl.startsWith('http')) {
       candidates.push({ label: 'Direct URL', url: youtubeUrl });
     }
-    candidates.push({ label: 'SoundCloud Clean Search', url: `scsearch1:${cleanArtist} ${cleanTitle}` });
     candidates.push({ label: 'YouTube Clean Search', url: `ytsearch1:${cleanArtist} - ${cleanTitle} (Official Audio)` });
+    candidates.push({ label: 'YouTube Full Search', url: `ytsearch1:${cleanArtist} ${title}` });
+    candidates.push({ label: 'SoundCloud Clean Search', url: `scsearch1:${cleanArtist} ${cleanTitle}` });
     if (cleanTitle !== title) {
       candidates.push({ label: 'SoundCloud Full Title', url: `scsearch1:${cleanArtist} ${title}` });
     }
-    candidates.push({ label: 'YouTube Full Search', url: `ytsearch1:${cleanArtist} ${title}` });
 
     for (const candidate of candidates) {
       try {
