@@ -209,10 +209,29 @@ async function execYtDlp(args, options = {}) {
     execFile(binary, args, { ...options, maxBuffer }, async (error, stdout, stderr) => {
       if (error) {
         const errMsg = (stderr || '') + (error.message || '');
+        const hasCookies = args.includes('--cookies');
+        
+        // If cookie file caused YouTube signature error or page reload error, retry WITHOUT cookies!
+        if (hasCookies && (errMsg.includes('page needs to be reloaded') || errMsg.includes('Signature solving failed') || errMsg.includes('Incomplete data'))) {
+          console.warn('Cookies caused YouTube parsing error. Retrying request WITHOUT cookies...');
+          const cookiesIdx = args.indexOf('--cookies');
+          const cleanArgs = [...args];
+          if (cookiesIdx !== -1) {
+            cleanArgs.splice(cookiesIdx, 2);
+          }
+          execFile(binary, cleanArgs, { ...options, maxBuffer }, (retryErr, retryStdout, retryStderr) => {
+            if (retryErr) {
+              reject({ error: retryErr, stderr: retryStderr, stdout: retryStdout });
+            } else {
+              resolve(retryStdout);
+            }
+          });
+          return;
+        }
+
         const needsUpdate = errMsg.toLowerCase().includes('update') || 
                             errMsg.toLowerCase().includes('latest version') || 
                             errMsg.toLowerCase().includes('unexpected response') ||
-                            errMsg.toLowerCase().includes('signature') ||
                             errMsg.toLowerCase().includes('confirm you are on the latest version');
         if (needsUpdate) {
           console.log('Detected yt-dlp error/outdated warning. Forcing self-update...');

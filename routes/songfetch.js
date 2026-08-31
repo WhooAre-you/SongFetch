@@ -755,55 +755,12 @@ router.post('/api/download', async (req, res) => {
   }
 });
 
-// Route: Fetch estimated MP3 size
+// Route: Fetch estimated MP3 size (instant JS calculation)
 router.post('/api/songfetch/size', async (req, res) => {
-  const { title, artist, youtubeUrl } = req.body;
-  
-  let downloadUrl = youtubeUrl;
-  if (!downloadUrl) {
-    if (!title || !artist) {
-      return res.json({ size: 'Unknown size' });
-    }
-    downloadUrl = `ytsearch1:${artist} - ${title} (Official Audio)`;
-  }
-
-  try {
-    const ytDlpBinary = await ensureYtDlp();
-    const args = getYtDlpArgs([
-      '-J',
-      '--no-playlist',
-      downloadUrl
-    ]);
-
-    execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, (error, stdout, stderr) => {
-      if (error) {
-        console.error('Failed to get song size:', error.message);
-        return res.json({ size: 'Unknown size' });
-      }
-
-      try {
-        const data = JSON.parse(stdout);
-        let size = 0;
-        let entries = data.entries ? data.entries[0] : data;
-        
-        if (entries && entries.formats) {
-          const audioFormats = entries.formats.filter(f => f.vcodec === 'none' && f.acodec !== 'none');
-          if (audioFormats.length > 0) {
-            audioFormats.sort((a, b) => (b.tbr || 0) - (a.tbr || 0));
-            size = audioFormats[0].filesize || audioFormats[0].filesize_approx || 0;
-          } else {
-            size = entries.filesize || entries.filesize_approx || 0;
-          }
-        }
-
-        res.json({ size: formatSize(size) });
-      } catch (parseErr) {
-        res.json({ size: 'Unknown size' });
-      }
-    });
-  } catch (err) {
-    res.json({ size: 'Unknown size' });
-  }
+  const { duration } = req.body;
+  const durationSec = duration || 210; // Default 3.5 minutes
+  const estimatedBytes = Math.round(durationSec * (128 * 1024 / 8));
+  res.json({ size: formatSize(estimatedBytes) });
 });
 
 // Route: Stream audio on the fly
