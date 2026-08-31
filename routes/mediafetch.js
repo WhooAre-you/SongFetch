@@ -8,7 +8,7 @@ const cheerio = require('cheerio');
 const qs = require('qs');
 const childProcess = require('child_process');
 const ffmpegPath = require('ffmpeg-static');
-const { ensureYtDlp, tempDir, formatDuration, formatSize } = require('../utils/ytDlp');
+const { ensureYtDlp, getYtDlpArgs, tempDir, formatDuration, formatSize } = require('../utils/ytDlp');
 
 function execFile(binary, args, options, callback) {
   let cb = callback;
@@ -525,13 +525,11 @@ router.post('/api/mediafetch/info', async (req, res) => {
     }
 
     const ytDlpBinary = await ensureYtDlp();
-    const args = [
-      '--extractor-args', 'youtube:player_client=tv_embedded',
-      '--no-cache-dir',
+    const args = getYtDlpArgs([
       '-J',
       '--no-playlist',
       url
-    ];
+    ]);
 
     console.log(`Fetching media metadata using yt-dlp for: ${url}`);
     
@@ -1116,14 +1114,12 @@ router.post('/api/mediafetch/download', async (req, res) => {
 
     console.log(`Starting media download using yt-dlp for: ${url} (Quality: ${quality})`);
 
-    let args = [
-      '--extractor-args', 'youtube:player_client=tv_embedded',
-      '--no-cache-dir',
+    let customArgs = [
       '--ffmpeg-location', ffmpegDir
     ];
 
     if (quality === 'audio') {
-      args.push(
+      customArgs.push(
         '-x',
         '--audio-format', 'mp3',
         '--audio-quality', '0',
@@ -1139,14 +1135,15 @@ router.post('/api/mediafetch/download', async (req, res) => {
         // Use bestvideo*+bestaudio to merge, falling back to best progressive with audio.
         formatSelector = 'bestvideo*+bestaudio/best[acodec!=none]/best';
       }
-      args.push(
+      customArgs.push(
         '-f', formatSelector,
         '--merge-output-format', 'mp4',
         '-o', path.join(tempDir, `${tempId}.%(ext)s`)
       );
     }
 
-    args.push(url);
+    customArgs.push(url);
+    const args = getYtDlpArgs(customArgs);
 
     execFile(ytDlpBinary, args, { maxBuffer: 1024 * 1024 * 50 }, async (error, stdout, stderr) => {
       if (error) {
@@ -1155,27 +1152,26 @@ router.post('/api/mediafetch/download', async (req, res) => {
 
         // Fallback for YouTube if yt-dlp fails due to bot check / sign in
         if (platform === 'youtube') {
-          console.warn('YouTube download failed/blocked. Attempting fallback with mweb client...');
-          const fallbackArgs = [
-            '--extractor-args', 'youtube:player_client=mweb',
-            '--no-cache-dir',
+          console.warn('YouTube download failed/blocked. Attempting fallback with progressive format...');
+          const fallbackCustomArgs = [
             '--ffmpeg-location', ffmpegDir
           ];
           if (quality === 'audio') {
-            fallbackArgs.push(
+            fallbackCustomArgs.push(
               '-x',
               '--audio-format', 'mp3',
               '--audio-quality', '0',
               '-o', path.join(tempDir, `${tempId}.%(ext)s`)
             );
           } else {
-            fallbackArgs.push(
+            fallbackCustomArgs.push(
               '-f', '18/best',
               '--merge-output-format', 'mp4',
               '-o', path.join(tempDir, `${tempId}.%(ext)s`)
             );
           }
-          fallbackArgs.push(url);
+          fallbackCustomArgs.push(url);
+          const fallbackArgs = getYtDlpArgs(fallbackCustomArgs);
 
           execFile(ytDlpBinary, fallbackArgs, { maxBuffer: 1024 * 1024 * 50 }, async (fbError, fbStdout, fbStderr) => {
             if (fbError) {
