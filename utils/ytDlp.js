@@ -40,6 +40,9 @@ async function ensureYtDlp(force = false) {
   }
 
   if (!needsDownload) {
+    if (!isWindows && fs.existsSync(ytDlpPath)) {
+      try { fs.chmodSync(ytDlpPath, 0o755); } catch (e) {}
+    }
     return ytDlpPath;
   }
   

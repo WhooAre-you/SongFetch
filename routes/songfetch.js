@@ -420,6 +420,24 @@ async function searchMediaOptions(query, limit = 50) {
     console.error('SoundCloud search error:', primaryQuery, err.message);
   }
 
+  // 4. Pure JS Fallback using youtube-sr (fast & reliable fallback if binaries fail)
+  try {
+    console.log(`Falling back to youtube-sr search for: "${primaryQuery}"`);
+    const YouTube = require('youtube-sr').default || require('youtube-sr');
+    const srResults = await YouTube.search(primaryQuery, { limit: limit, type: 'video' });
+    if (srResults && srResults.length > 0) {
+      return srResults.map(video => ({
+        title: video.title || 'YouTube Song',
+        artist: video.channel ? video.channel.name.replace('- Topic', '').trim() : 'Unknown Artist',
+        album: 'YouTube Search Result',
+        artwork: video.thumbnail ? video.thumbnail.url : '',
+        youtubeUrl: `https://www.youtube.com/watch?v=${video.id}`
+      }));
+    }
+  } catch (srErr) {
+    console.error('youtube-sr fallback search error:', srErr.message);
+  }
+
   return [];
 }
 
