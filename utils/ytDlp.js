@@ -162,7 +162,8 @@ function getYtDlpArgs(customArgs = []) {
   const baseArgs = [
     '--no-cache-dir',
     '--js-runtimes', 'node',
-    '--extractor-args', 'youtube:player_client=ios,mweb,android,tv,web'
+    '--extractor-args', 'youtube:player_client=android,mweb',
+    '--user-agent', 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36'
   ];
 
   const cookiesFile = getCookiesPath();
