@@ -1,3 +1,5 @@
+const API_BASE = window.API_BASE_URL || (window.location.hostname.includes('ct.ws') || window.location.hostname.includes('infinityfree') ? 'https://song-fetch.vercel.app' : '');
+
 document.addEventListener('DOMContentLoaded', () => {
     const searchForm = document.getElementById('search-form');
     const searchInput = document.getElementById('search-input');
@@ -255,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const response = await fetch('/api/mediafetch/info', {
+            const response = await fetch(`${API_BASE}/api/mediafetch/info`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url })
@@ -461,7 +463,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Helper: Trigger browser file download from a proxy blob stream using POST body payloads
     async function downloadFileFromProxy(url, filename, ext, onProgress) {
-        const response = await fetch('/api/mediafetch/download-direct', {
+        const response = await fetch(`${API_BASE}/api/mediafetch/download-direct`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url, title: filename, ext })
@@ -629,7 +631,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 800);
 
             try {
-                const response = await fetch('/api/mediafetch/download', {
+                const response = await fetch(`${API_BASE}/api/mediafetch/download`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

@@ -1,3 +1,5 @@
+const API_BASE = window.API_BASE_URL || (window.location.hostname.includes('ct.ws') || window.location.hostname.includes('infinityfree') ? 'https://song-fetch.vercel.app' : '');
+
 document.addEventListener('DOMContentLoaded', () => {
     const searchForm = document.getElementById('search-form');
     const searchInput = document.getElementById('search-input');
@@ -124,7 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!songFilesize || !songData) return;
         songFilesize.textContent = 'Estimating file size...';
         try {
-            const response = await fetch('/api/songfetch/size', {
+            const response = await fetch(`${API_BASE}/api/songfetch/size`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -170,7 +172,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         try {
-            const response = await fetch('/api/search', {
+            const response = await fetch(`${API_BASE}/api/search`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -380,7 +382,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             // Initiate backend download and streaming
-            const response = await fetch('/api/download', {
+            const response = await fetch(`${API_BASE}/api/download`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -493,7 +495,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? track.youtubeUrl
                 : `${track.title} ${track.artist}`;
 
-            const response = await fetch('/api/search', {
+            const response = await fetch(`${API_BASE}/api/search`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ queryOrUrl: query, resolveDirect: true })
@@ -550,7 +552,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btnElement.innerHTML = `<span class="spinner-mini"></span>`;
 
         try {
-            const response = await fetch('/api/download', {
+            const response = await fetch(`${API_BASE}/api/download`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'

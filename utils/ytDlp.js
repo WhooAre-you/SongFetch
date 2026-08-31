@@ -3,11 +3,12 @@ const fs = require('fs');
 const axios = require('axios');
 
 const projectRoot = path.join(__dirname, '..');
-const binDir = path.join(projectRoot, 'bin');
-const tempDir = path.join(projectRoot, 'temp');
+const isVercel = Boolean(process.env.VERCEL);
+const binDir = isVercel ? '/tmp' : path.join(projectRoot, 'bin');
+const tempDir = isVercel ? '/tmp' : path.join(projectRoot, 'temp');
 
 if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir, { recursive: true });
+  try { fs.mkdirSync(tempDir, { recursive: true }); } catch (e) {}
 }
 
 // OS-specific yt-dlp setup

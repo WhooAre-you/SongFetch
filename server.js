@@ -48,16 +48,21 @@ app.use(require('./routes/mediafetch'));
 app.use(require('./routes/movies'));
 app.use(require('./routes/series').router);
 
-// Start Server & verify binaries on startup
-app.listen(PORT, async () => {
-  console.log(`=========================================`);
-  console.log(` OmniFetch Server is running on port ${PORT}`);
-  console.log(` URL: http://localhost:${PORT}`);
-  console.log(`=========================================`);
-  try {
-    cleanTempDir();
-    await ensureYtDlp();
-  } catch (e) {
-    console.error('Warning: Failed to verify or download yt-dlp on startup. Will try again on demand.');
-  }
-});
+// Export Express app for Vercel serverless functions
+module.exports = app;
+
+// Start Server listener when running locally
+if (!process.env.VERCEL) {
+  app.listen(PORT, async () => {
+    console.log(`=========================================`);
+    console.log(` OmniFetch Server is running on port ${PORT}`);
+    console.log(` URL: http://localhost:${PORT}`);
+    console.log(`=========================================`);
+    try {
+      cleanTempDir();
+      await ensureYtDlp();
+    } catch (e) {
+      console.error('Warning: Failed to verify or download yt-dlp on startup. Will try again on demand.');
+    }
+  });
+}
