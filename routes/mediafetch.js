@@ -526,8 +526,7 @@ router.post('/api/mediafetch/info', async (req, res) => {
 
     const ytDlpBinary = await ensureYtDlp();
     const args = [
-      '--extractor-args', 'youtube:player_client=android',
-      '--js-runtimes', 'node',
+      '--extractor-args', 'youtube:player_client=tv_embedded',
       '--no-cache-dir',
       '-J',
       '--no-playlist',
@@ -1118,8 +1117,7 @@ router.post('/api/mediafetch/download', async (req, res) => {
     console.log(`Starting media download using yt-dlp for: ${url} (Quality: ${quality})`);
 
     let args = [
-      '--extractor-args', 'youtube:skip=webpage;player_client=android_vr',
-      '--js-runtimes', 'node',
+      '--extractor-args', 'youtube:player_client=tv_embedded',
       '--no-cache-dir',
       '--ffmpeg-location', ffmpegDir
     ];
@@ -1157,9 +1155,9 @@ router.post('/api/mediafetch/download', async (req, res) => {
 
         // Fallback for YouTube if yt-dlp fails due to bot check / sign in
         if (platform === 'youtube') {
-          console.warn('YouTube download failed/blocked. Attempting fallback download using unblocked android client...');
+          console.warn('YouTube download failed/blocked. Attempting fallback with mweb client...');
           const fallbackArgs = [
-            '--extractor-args', 'youtube:player_client=android',
+            '--extractor-args', 'youtube:player_client=mweb',
             '--no-cache-dir',
             '--ffmpeg-location', ffmpegDir
           ];
