@@ -210,6 +210,40 @@ router.post('/api/mediafetch/info', async (req, res) => {
     platform = 'facebook';
   }
 
+  // Fast YouTube oEmbed metadata handler (prevents 429 bot blocks on cloud IPs)
+  if (platform === 'youtube') {
+    try {
+      console.log('Fetching YouTube media metadata via oEmbed:', url);
+      const match = url.match(/(?:v=|\/embed\/|\/watch\?v=|youtu\.be\/|\/v\/|\/e\/|shorts\/)([^"&?/\s]{11})/);
+      const videoId = match ? match[1] : null;
+
+      if (videoId) {
+        const oembedRes = await axios.get(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`, { timeout: 4000 });
+        const title = oembedRes.data.title || 'YouTube Video';
+        const author = oembedRes.data.author_name || 'YouTube Channel';
+        const thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+
+        return res.json({
+          title,
+          thumbnail,
+          duration: 'Video',
+          uploader: author,
+          platform: 'youtube',
+          formats: [
+            { height: '1080p (Best Quality)', size: 'HD Stream', url: `/api/mediafetch/download-direct?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&title=${encodeURIComponent(title)}&quality=best` },
+            { height: '720p', size: 'HD Stream', url: `/api/mediafetch/download-direct?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&title=${encodeURIComponent(title)}&quality=720` },
+            { height: '480p', size: 'SD Stream', url: `/api/mediafetch/download-direct?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&title=${encodeURIComponent(title)}&quality=480` },
+            { height: 'Audio Only (MP3)', size: 'Audio Stream', url: `/api/mediafetch/download-direct?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&title=${encodeURIComponent(title)}&quality=audio` }
+          ],
+          audioSize: 'Audio Stream',
+          bestSize: 'HD Stream'
+        });
+      }
+    } catch (ytOembedErr) {
+      console.warn('YouTube oEmbed extraction warning, falling back:', ytOembedErr.message);
+    }
+  }
+
   try {
     // If it is Facebook, try the Snapsave scraper first (as it gets HD/SD direct links)
     if (platform === 'facebook') {

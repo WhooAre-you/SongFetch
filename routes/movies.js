@@ -480,8 +480,8 @@ router.post('/api/movies/imdb', async (req, res) => {
   }
 });
 
-// Route: Search IMDb Suggestions for English Titles (replaces WeFeed search!)
-router.get('/api/movies/imdb-search', async (req, res) => {
+// Route: Search IMDb Suggestions for English Titles (supports both /imdb-search and /search)
+router.get(['/api/movies/imdb-search', '/api/movies/search'], async (req, res) => {
   const { q } = req.query;
   if (!q) return res.status(400).json({ error: 'Query is required' });
   
