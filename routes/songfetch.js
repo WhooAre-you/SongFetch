@@ -628,6 +628,38 @@ router.post('/api/download', async (req, res) => {
     let downloadedPath = null;
     let lastError = null;
 
+    // 0. Fast Direct Stream Proxy (Zero local CPU transcoding, instant < 1s streaming)
+    if (youtubeUrl && youtubeUrl.startsWith('http')) {
+      try {
+        console.log(`Attempting Fast Direct Stream Proxy for: ${youtubeUrl}`);
+        const streamUrlArgs = getYtDlpArgs(['-g', '-f', '140/ba/b', youtubeUrl]);
+        const directAudioUrl = (await execYtDlp(streamUrlArgs)).trim();
+
+        if (directAudioUrl && directAudioUrl.startsWith('http')) {
+          console.log('Fast Direct Stream URL resolved! Piping audio stream directly to client...');
+          const cdnStream = await axios.get(directAudioUrl, {
+            responseType: 'stream',
+            timeout: 10000,
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+            }
+          });
+
+          const safeFilename = `${artist} - ${title}.mp3`.replace(/[\\/:*?"<>|]/g, '_');
+          res.setHeader('Content-Type', 'audio/mpeg');
+          res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
+          if (cdnStream.headers['content-length']) {
+            res.setHeader('Content-Length', cdnStream.headers['content-length']);
+          }
+
+          cdnStream.data.pipe(res);
+          return;
+        }
+      } catch (fastErr) {
+        console.warn('Fast Direct Stream Proxy fallback warning:', fastErr.message || fastErr);
+      }
+    }
+
     const cleanArtist = (artist || '')
       .replace(/\s*-\s*Topic$/i, '')
       .replace(/Official(\s*Channel)?$/i, '')
