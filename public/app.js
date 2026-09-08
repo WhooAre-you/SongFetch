@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const playlistTrackCount = document.getElementById('playlist-track-count');
     const playlistTracksList = document.getElementById('playlist-tracks-list');
     const downloadAllBtn = document.getElementById('download-all-btn');
+    const downloadZipBtn = document.getElementById('download-zip-btn');
     const playlistProgress = document.getElementById('playlist-progress-bar-container');
     const playlistProgressPercent = document.getElementById('playlist-progress-percent');
     const playlistProgressFill = document.getElementById('playlist-progress-fill');
@@ -43,6 +44,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const searchOptionsList = document.getElementById('search-options-list');
 
     let currentSongData = null;
+    let currentQuality = localStorage.getItem('songfetch_quality') || '160';
+
+    function setAudioQuality(newQuality) {
+        currentQuality = newQuality;
+        localStorage.setItem('songfetch_quality', newQuality);
+
+        document.querySelectorAll('.quality-pill').forEach(pill => {
+            if (pill.getAttribute('data-quality') === newQuality) {
+                pill.classList.add('active');
+            } else {
+                pill.classList.remove('active');
+            }
+        });
+
+        if (currentSongData) {
+            fetchAndDisplaySongSize(currentSongData);
+        }
+    }
+
+    // Attach quality pill event listeners
+    document.querySelectorAll('.quality-pill').forEach(pill => {
+        pill.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const q = pill.getAttribute('data-quality');
+            if (q) setAudioQuality(q);
+        });
+    });
+
+    setAudioQuality(currentQuality);
 
     // Quick Search Pills
     document.querySelectorAll('.quick-pill').forEach(pill => {
@@ -105,6 +135,9 @@ document.addEventListener('DOMContentLoaded', () => {
         playlistTracksList.innerHTML = '';
         searchOptionsList.innerHTML = '';
         downloadAllBtn.disabled = false;
+        if (downloadZipBtn) {
+            downloadZipBtn.disabled = false;
+        }
         if (songFilesize) {
             songFilesize.textContent = '';
         }
@@ -132,12 +165,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({
                     title: songData.title,
                     artist: songData.artist,
-                    youtubeUrl: songData.youtubeUrl
+                    youtubeUrl: songData.youtubeUrl,
+                    quality: currentQuality
                 })
             });
             if (response.ok) {
                 const data = await response.json();
-                songFilesize.textContent = `Estimated size: ${data.size}`;
+                songFilesize.textContent = `Estimated size: ${data.size} (${currentQuality} kbps)`;
             } else {
                 songFilesize.textContent = 'Estimated size: Unknown';
             }
@@ -268,11 +302,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
 
                 playlistResult.classList.remove('hidden');
-                
-                // Set click listener for Download All
+
+                // Set click listeners for Download All and Download as ZIP
                 downloadAllBtn.onclick = async () => {
                     await downloadAllPlaylistTracks(data.tracks);
                 };
+                if (downloadZipBtn) {
+                    downloadZipBtn.onclick = async () => {
+                        await downloadPlaylistAsZip(data.tracks, downloadZipBtn);
+                    };
+                }
             } else if (data.isOptionsList) {
                 // Update results count badge
                 const count = data.options ? data.options.length : 0;
@@ -387,7 +426,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(currentSongData)
+                body: JSON.stringify({
+                    ...currentSongData,
+                    quality: currentQuality
+                })
             });
 
             clearInterval(simulatedInterval);
@@ -559,7 +601,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify(track)
+                    body: JSON.stringify({
+                        ...track,
+                        quality: currentQuality
+                    })
                 });
 
                 if (!response.ok) {
@@ -629,6 +674,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Download all playlist tracks sequentially
     async function downloadAllPlaylistTracks(tracks) {
         downloadAllBtn.disabled = true;
+        if (downloadZipBtn) downloadZipBtn.disabled = true;
         playlistProgress.classList.remove('hidden');
         
         const total = tracks.length;
@@ -642,7 +688,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const track = tracks[i];
             const btn = document.getElementById(`track-btn-${i}`);
             
-            playlistProgressStatus.textContent = `Downloading track ${i + 1} of ${total}: "${track.title}"...`;
+            playlistProgressStatus.textContent = `Downloading track ${i + 1} of ${total}: "${track.title}" (${currentQuality} kbps)...`;
             
             // Trigger download and wait for it to complete before starting next track
             const success = await downloadPlaylistTrack(track, btn);
@@ -661,6 +707,130 @@ document.addEventListener('DOMContentLoaded', () => {
 
         playlistProgressStatus.textContent = `Finished! Successfully downloaded ${successCount} out of ${total} tracks.`;
         downloadAllBtn.disabled = false;
+        if (downloadZipBtn) downloadZipBtn.disabled = false;
+    }
+
+    // Download all playlist tracks and bundle into a single ZIP archive
+    async function downloadPlaylistAsZip(tracks, zipBtn) {
+        if (typeof JSZip === 'undefined') {
+            alert('ZIP library is still loading, please wait a few seconds and try again.');
+            return;
+        }
+
+        downloadAllBtn.disabled = true;
+        if (downloadZipBtn) downloadZipBtn.disabled = true;
+        playlistProgress.classList.remove('hidden');
+
+        const total = tracks.length;
+        playlistProgressPercent.textContent = `0/${total}`;
+        playlistProgressFill.style.width = '0%';
+        playlistProgressStatus.textContent = `Preparing ZIP archive for ${total} tracks...`;
+
+        const zip = new JSZip();
+        let packedCount = 0;
+
+        for (let i = 0; i < total; i++) {
+            const track = tracks[i];
+            const btn = document.getElementById(`track-btn-${i}`);
+            if (btn) {
+                btn.classList.add('downloading');
+                btn.innerHTML = `<span class="spinner-mini"></span>`;
+            }
+
+            playlistProgressStatus.textContent = `Downloading & packing track ${i + 1} of ${total}: "${track.title}" (${currentQuality} kbps)...`;
+
+            let blob = null;
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    const response = await fetch(`${API_BASE}/api/download`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ...track,
+                            quality: currentQuality
+                        })
+                    });
+
+                    if (!response.ok) {
+                        const errData = await response.json().catch(() => ({}));
+                        throw new Error(errData.error || `HTTP ${response.status}`);
+                    }
+
+                    blob = await response.blob();
+                    break;
+                } catch (err) {
+                    console.warn(`Track ${i + 1} attempt ${attempt} failed for ZIP:`, err.message);
+                    if (attempt < 3) {
+                        await new Promise(r => setTimeout(r, 1200));
+                    }
+                }
+            }
+
+            if (blob) {
+                const safeFilename = `${track.artist} - ${track.title}.mp3`.replace(/[\\/:*?"<>|]/g, '_');
+                zip.file(safeFilename, blob);
+                packedCount++;
+                if (btn) {
+                    btn.classList.remove('downloading');
+                    btn.classList.add('success');
+                    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+                }
+            } else {
+                if (btn) {
+                    btn.classList.remove('downloading');
+                    btn.classList.add('error');
+                    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+                }
+            }
+
+            const percent = Math.round(((i + 1) / total) * 90);
+            playlistProgressFill.style.width = `${percent}%`;
+            playlistProgressPercent.textContent = `${i + 1}/${total}`;
+
+            if (i < total - 1) {
+                await new Promise(r => setTimeout(r, 400));
+            }
+        }
+
+        if (packedCount === 0) {
+            playlistProgressStatus.textContent = 'Failed to download tracks for ZIP archive.';
+            downloadAllBtn.disabled = false;
+            if (downloadZipBtn) downloadZipBtn.disabled = false;
+            return;
+        }
+
+        playlistProgressStatus.textContent = `Compressing ${packedCount} MP3 tracks into ZIP archive...`;
+        playlistProgressFill.style.width = '95%';
+
+        try {
+            const zipBlob = await zip.generateAsync({
+                type: 'blob',
+                compression: 'DEFLATE',
+                compressionOptions: { level: 4 }
+            }, (metadata) => {
+                const genPercent = 90 + Math.round((metadata.percent / 100) * 10);
+                playlistProgressFill.style.width = `${genPercent}%`;
+            });
+
+            const zipUrl = URL.createObjectURL(zipBlob);
+            const a = document.createElement('a');
+            a.href = zipUrl;
+            const albumName = (playlistTitle.textContent || 'Album').trim().replace(/[\\/:*?"<>|]/g, '_');
+            a.download = `${albumName} (${currentQuality}kbps).zip`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(zipUrl);
+
+            playlistProgressFill.style.width = '100%';
+            playlistProgressStatus.textContent = `ZIP Download complete! Successfully packaged ${packedCount} of ${total} tracks.`;
+        } catch (zipErr) {
+            console.error('ZIP generation error:', zipErr);
+            playlistProgressStatus.textContent = `Error creating ZIP: ${zipErr.message}`;
+        }
+
+        downloadAllBtn.disabled = false;
+        if (downloadZipBtn) downloadZipBtn.disabled = false;
     }
     // ─── Audio Preview System ────────────────────────────────────────
 

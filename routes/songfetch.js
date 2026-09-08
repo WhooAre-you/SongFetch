@@ -564,15 +564,21 @@ router.post('/api/search', async (req, res) => {
 });
 
 // Helper to execute audio download via yt-dlp with optimized speed & fallback
-async function executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, targetUrl) {
+async function executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, targetUrl, quality = '160') {
   const finalMp3Path = path.join(tempDir, `${tempId}.mp3`);
+  
+  // Map quality to yt-dlp audio-quality (0 = best ~320k, 5 = standard ~160k, 7 = compact ~128k)
+  let audioQualityArg = '5';
+  if (quality === '320') audioQualityArg = '0';
+  else if (quality === '128') audioQualityArg = '7';
+
   const args = getYtDlpArgs([
     '-f', '140/ba[ext=m4a]/ba/b/best',
     '--concurrent-fragments', '4',
     '--buffer-size', '16K',
     '-x',
     '--audio-format', 'mp3',
-    '--audio-quality', '5',
+    '--audio-quality', audioQualityArg,
     '--ffmpeg-location', ffmpegDir,
     '-o', path.join(tempDir, `${tempId}.%(ext)s`),
     targetUrl
@@ -591,7 +597,8 @@ async function executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, targetUrl) {
 
 // Route: Download & Embed Metadata
 router.post('/api/download', async (req, res) => {
-  const { title, artist, album, artwork, youtubeUrl } = req.body;
+  const { title, artist, album, artwork, youtubeUrl, quality } = req.body;
+  const audioQuality = quality || '160';
 
   if (!title || !artist) {
     return res.status(400).json({ error: 'Title and artist are required' });
@@ -701,8 +708,8 @@ router.post('/api/download', async (req, res) => {
 
     for (const candidate of candidates) {
       try {
-        console.log(`Attempting download via [${candidate.label}]: ${candidate.url}`);
-        downloadedPath = await executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, candidate.url);
+        console.log(`Attempting download via [${candidate.label}]: ${candidate.url} at ${audioQuality}kbps`);
+        downloadedPath = await executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, candidate.url, audioQuality);
         if (downloadedPath && fs.existsSync(downloadedPath)) {
           console.log(`Download succeeded via [${candidate.label}]`);
           break;
@@ -789,9 +796,10 @@ router.post('/api/download', async (req, res) => {
 
 // Route: Fetch estimated MP3 size (instant JS calculation)
 router.post('/api/songfetch/size', async (req, res) => {
-  const { duration } = req.body;
+  const { duration, quality } = req.body;
   const durationSec = duration || 210; // Default 3.5 minutes
-  const estimatedBytes = Math.round(durationSec * (128 * 1024 / 8));
+  const bitrateKbps = quality === '320' ? 320 : (quality === '128' ? 128 : 160);
+  const estimatedBytes = Math.round(durationSec * (bitrateKbps * 1024 / 8));
   res.json({ size: formatSize(estimatedBytes) });
 });
 

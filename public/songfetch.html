@@ -215,6 +215,16 @@
                             <span id="song-album">Album Name</span>
                         </p>
 
+                        <!-- Audio Quality Selector -->
+                        <div class="quality-selector-container">
+                            <span class="quality-label">Quality:</span>
+                            <div class="quality-pills" id="song-quality-selector">
+                                <button type="button" class="quality-pill" data-quality="128">128k <small>Compact</small></button>
+                                <button type="button" class="quality-pill active" data-quality="160">160k <small>Standard</small></button>
+                                <button type="button" class="quality-pill" data-quality="320">320k <small>High</small></button>
+                            </div>
+                        </div>
+
                         <!-- Download Actions -->
                         <div class="download-container">
                             <button id="download-btn" class="download-btn">
@@ -308,14 +318,32 @@
                             <p class="playlist-meta-info">
                                 <span id="playlist-track-count">0 tracks</span>
                             </p>
-                            <div class="download-container">
-                                <button id="download-all-btn" class="download-btn">
+                            <!-- Playlist Audio Quality Selector -->
+                            <div class="quality-selector-container playlist-quality-container">
+                                <span class="quality-label">Quality:</span>
+                                <div class="quality-pills" id="playlist-quality-selector">
+                                    <button type="button" class="quality-pill" data-quality="128">128k <small>Compact</small></button>
+                                    <button type="button" class="quality-pill active" data-quality="160">160k <small>Standard</small></button>
+                                    <button type="button" class="quality-pill" data-quality="320">320k <small>High</small></button>
+                                </div>
+                            </div>
+
+                            <div class="download-container playlist-download-actions">
+                                <button id="download-zip-btn" class="download-btn download-zip-btn" title="Download all tracks packaged into a single ZIP file">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                                        <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                                        <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                                    </svg>
+                                    <span>Download as ZIP</span>
+                                </button>
+                                <button id="download-all-btn" class="download-btn download-btn-secondary" title="Download each track as a separate file">
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
                                         <polyline points="7 10 12 15 17 10"></polyline>
                                         <line x1="12" y1="15" x2="12" y2="3"></line>
                                     </svg>
-                                    <span>Download All Tracks</span>
+                                    <span>Separate Files</span>
                                 </button>
                             </div>
                         </div>
@@ -365,6 +393,7 @@
     
 
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="app.js"></script>
     <script src="private-bookmarks.js"></script>
 </body>
