@@ -65,7 +65,7 @@ if (!process.env.VERCEL) {
     console.log(`=========================================`);
     try {
       cleanTempDir();
-      await ensureYtDlp(true);
+      await ensureYtDlp(false);
     } catch (e) {
       console.error('Warning: Failed to verify or download yt-dlp on startup. Will try again on demand.');
     }

@@ -175,7 +175,17 @@ async function resolveSpotifyTrack(url) {
 async function resolveYouTubeTrack(url) {
   try {
     console.log(`Resolving YouTube URL: ${url}`);
-    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+    let cleanUrl = url;
+    const vMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+    if (vMatch) {
+      cleanUrl = `https://www.youtube.com/watch?v=${vMatch[1]}`;
+    } else {
+      const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+      if (shortMatch) {
+        cleanUrl = `https://www.youtube.com/watch?v=${shortMatch[1]}`;
+      }
+    }
+    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(cleanUrl)}&format=json`;
     const response = await axios.get(oembedUrl);
     const videoTitle = response.data.title;
     const author = response.data.author_name;
@@ -212,7 +222,7 @@ async function resolveYouTubeTrack(url) {
       artist,
       album: 'YouTube Single',
       artwork: response.data.thumbnail_url || '',
-      youtubeUrl: url
+      youtubeUrl: cleanUrl
     };
   } catch (error) {
     console.error('YouTube resolver error:', error.message);
@@ -572,7 +582,17 @@ async function executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, targetUrl, q
   if (quality === '320') audioQualityArg = '0';
   else if (quality === '128') audioQualityArg = '7';
 
+  // Sanitize targetUrl: strip any radio / playlist parameters so yt-dlp only downloads this single track
+  let cleanTargetUrl = targetUrl;
+  if (cleanTargetUrl && typeof cleanTargetUrl === 'string') {
+    const vMatch = cleanTargetUrl.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+    if (vMatch) {
+      cleanTargetUrl = `https://www.youtube.com/watch?v=${vMatch[1]}`;
+    }
+  }
+
   const args = getYtDlpArgs([
+    '--no-playlist',
     '-f', '140/ba[ext=m4a]/ba/b/best',
     '--concurrent-fragments', '4',
     '--buffer-size', '16K',
@@ -581,7 +601,7 @@ async function executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, targetUrl, q
     '--audio-quality', audioQualityArg,
     '--ffmpeg-location', ffmpegDir,
     '-o', path.join(tempDir, `${tempId}.%(ext)s`),
-    targetUrl
+    cleanTargetUrl
   ]);
 
   return new Promise((resolve, reject) => {
@@ -623,6 +643,17 @@ router.post('/api/download', async (req, res) => {
   })();
 
   let downloadUrl = youtubeUrl;
+  if (downloadUrl && typeof downloadUrl === 'string') {
+    const vMatch = downloadUrl.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+    if (vMatch) {
+      downloadUrl = `https://www.youtube.com/watch?v=${vMatch[1]}`;
+    } else {
+      const shortMatch = downloadUrl.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+      if (shortMatch) {
+        downloadUrl = `https://www.youtube.com/watch?v=${shortMatch[1]}`;
+      }
+    }
+  }
   if (!downloadUrl) {
     downloadUrl = `ytsearch1:${artist} - ${title} (Official Audio)`;
   }
@@ -634,38 +665,6 @@ router.post('/api/download', async (req, res) => {
     console.log(`Starting audio download using yt-dlp for: ${downloadUrl}`);
     let downloadedPath = null;
     let lastError = null;
-
-    // 0. Fast Direct Stream Proxy (Zero local CPU transcoding, instant < 1s streaming)
-    if (youtubeUrl && youtubeUrl.startsWith('http')) {
-      try {
-        console.log(`Attempting Fast Direct Stream Proxy for: ${youtubeUrl}`);
-        const streamUrlArgs = getYtDlpArgs(['-g', '-f', '140/ba/b', youtubeUrl]);
-        const directAudioUrl = (await execYtDlp(streamUrlArgs)).trim();
-
-        if (directAudioUrl && directAudioUrl.startsWith('http')) {
-          console.log('Fast Direct Stream URL resolved! Piping audio stream directly to client...');
-          const cdnStream = await axios.get(directAudioUrl, {
-            responseType: 'stream',
-            timeout: 10000,
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
-            }
-          });
-
-          const safeFilename = `${artist} - ${title}.mp3`.replace(/[\\/:*?"<>|]/g, '_');
-          res.setHeader('Content-Type', 'audio/mpeg');
-          res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(safeFilename)}"`);
-          if (cdnStream.headers['content-length']) {
-            res.setHeader('Content-Length', cdnStream.headers['content-length']);
-          }
-
-          cdnStream.data.pipe(res);
-          return;
-        }
-      } catch (fastErr) {
-        console.warn('Fast Direct Stream Proxy fallback warning:', fastErr.message || fastErr);
-      }
-    }
 
     const cleanArtist = (artist || '')
       .replace(/\s*-\s*Topic$/i, '')
@@ -696,8 +695,8 @@ router.post('/api/download', async (req, res) => {
     }
 
     const candidates = [];
-    if (youtubeUrl && youtubeUrl.startsWith('http')) {
-      candidates.push({ label: 'Direct URL', url: youtubeUrl });
+    if (downloadUrl && downloadUrl.startsWith('http')) {
+      candidates.push({ label: 'Direct URL', url: downloadUrl });
     }
     candidates.push({ label: 'YouTube Clean Search', url: `ytsearch1:${cleanArtist} - ${cleanTitle} (Official Audio)` });
     candidates.push({ label: 'YouTube Full Search', url: `ytsearch1:${cleanArtist} ${title}` });

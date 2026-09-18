@@ -420,6 +420,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 600);
 
         try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 60000);
+
             // Initiate backend download and streaming
             const response = await fetch(`${API_BASE}/api/download`, {
                 method: 'POST',
@@ -429,9 +432,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({
                     ...currentSongData,
                     quality: currentQuality
-                })
+                }),
+                signal: controller.signal
             });
 
+            clearTimeout(timeoutId);
             clearInterval(simulatedInterval);
 
             if (!response.ok) {
@@ -494,7 +499,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             clearInterval(simulatedInterval);
             console.error('Download error:', error);
-            updateProgressUI(0, `Error: ${error.message}`);
+            const msg = error.name === 'AbortError' 
+                ? 'Download timed out. Please try again.' 
+                : (error.message || 'Download failed');
+            updateProgressUI(0, `Error: ${msg}`);
             downloadBtn.disabled = false;
         }
     });
