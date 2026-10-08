@@ -34,6 +34,10 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
+// Health check endpoints for keeping Render awake (UptimeRobot, cron jobs)
+app.get('/health', (req, res) => res.status(200).send('OK'));
+app.get('/ping', (req, res) => res.status(200).send('pong'));
+
 // HTML Page Routes
 app.get('/songfetch', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'songfetch.html'));
