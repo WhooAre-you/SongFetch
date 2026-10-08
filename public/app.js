@@ -408,13 +408,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (simulatedProgress < 85) {
                 // Slower increment as it approaches 85%
                 const increment = simulatedProgress < 50 
-                    ? Math.floor(Math.random() * 8) + 4 
-                    : Math.floor(Math.random() * 3) + 1;
+                    ? Math.floor(Math.random() * 4) + 2 
+                    : Math.floor(Math.random() * 2) + 1;
                 
                 simulatedProgress += increment;
                 if (simulatedProgress > 85) simulatedProgress = 85;
 
-                let status = 'Downloading audio from YouTube...';
+                let status = 'Downloading audio from server...';
                 if (simulatedProgress > 45 && simulatedProgress <= 70) {
                     status = 'Converting audio to MP3 using FFmpeg...';
                 } else if (simulatedProgress > 70) {
@@ -423,11 +423,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 updateProgressUI(simulatedProgress, status);
             }
-        }, 600);
+        }, 800);
 
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 60000);
+            const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes timeout for cloud transcoding
 
             // Initiate backend download and streaming
             const response = await fetch(`${API_BASE}/api/download`, {

@@ -571,7 +571,7 @@ router.post('/api/search', async (req, res) => {
           metadata = options[0];
         }
       } else {
-        const options = await searchMediaOptions(queryOrUrl, 50);
+        const options = await searchMediaOptions(queryOrUrl, 20);
         if (!options || options.length === 0) {
           return res.status(404).json({ error: 'No songs found matching your search.' });
         }
@@ -613,13 +613,14 @@ async function executeAudioDownload(ytDlpBinary, ffmpegDir, tempId, targetUrl, q
 
   const args = getYtDlpArgs([
     '--no-playlist',
-    '-f', '140/ba[ext=m4a]/ba/b/best',
-    '--concurrent-fragments', '4',
+    '-f', 'ba/b/best',
+    '--concurrent-fragments', '2',
     '--buffer-size', '16K',
     '-x',
     '--audio-format', 'mp3',
     '--audio-quality', audioQualityArg,
     '--ffmpeg-location', ffmpegDir,
+    '--downloader-args', 'ffmpeg:-threads 2',
     '-o', path.join(tempDir, `${tempId}.%(ext)s`),
     cleanTargetUrl
   ]);
