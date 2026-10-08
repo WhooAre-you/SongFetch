@@ -1,3 +1,11 @@
+const API_BASE = window.API_BASE_URL || (
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1' || 
+    window.location.hostname.includes('onrender.com') 
+        ? '' 
+        : 'https://songfetch-wzt8.onrender.com'
+);
+
 // Global Ad / Popup Interceptor
 window.open = function(url, target, features) {
     console.warn('[AdBlock] Blocked popup window request to:', url);
@@ -317,7 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
         loader.classList.remove('hidden');
 
         try {
-            const stdRes = await fetch(`/api/movies/search-all?q=${encodeURIComponent(query)}`).then(r => r.ok ? r.json() : { results: [] });
+            const stdRes = await fetch(`${API_BASE}/api/movies/search-all?q=${encodeURIComponent(query)}`).then(r => r.ok ? r.json() : { results: [] });
 
             loader.classList.add('hidden');
 
@@ -616,7 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (sourcesToResolve.length > 0) {
             try {
-                const sres = await fetch('/api/movies/resolve-servers', {
+                const sres = await fetch(`${API_BASE}/api/movies/resolve-servers`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ sources: sourcesToResolve, title: parentItem.title || activeMovieTitle })
@@ -748,7 +756,7 @@ function attachAdClickShield() {
     async function loadOstoraLiveChannels() {
         trendingGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; color: #ef4444; padding: 2rem;">⏳ Loading Ostora Live TV Feeds...</div>';
         try {
-            const res = await fetch('/api/ostora/channels');
+            const res = await fetch(`${API_BASE}/api/ostora/channels`);
             if (!res.ok) throw new Error();
             const data = await res.json();
             
@@ -892,7 +900,7 @@ function attachAdClickShield() {
             // First try to get IMDB ID from our backend
             let imdbId = null;
             try {
-                const imdbRes = await fetch('/api/movies/imdb', {
+                const imdbRes = await fetch(`${API_BASE}/api/movies/imdb`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ title: cleanQuery })

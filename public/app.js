@@ -1,4 +1,10 @@
-const API_BASE = window.API_BASE_URL || (window.location.hostname.includes('ct.ws') || window.location.hostname.includes('infinityfree') ? 'https://songfetch-backend-production.up.railway.app' : '');
+const API_BASE = window.API_BASE_URL || (
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1' || 
+    window.location.hostname.includes('onrender.com') 
+        ? '' 
+        : 'https://songfetch-wzt8.onrender.com'
+);
 
 document.addEventListener('DOMContentLoaded', () => {
     const searchForm = document.getElementById('search-form');
