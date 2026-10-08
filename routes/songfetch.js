@@ -265,30 +265,50 @@ function extractEntriesFromYtDlp(data, albumLabel) {
   const options = [];
   if (data && data.entries && data.entries.length > 0) {
     data.entries.forEach(video => {
-      if (video && video.title) {
-        let title = video.title;
-        let artist = video.uploader || 'Unknown Artist';
-        if (title.includes(' - ')) {
-          const parts = title.split(' - ');
-          artist = parts[0].trim();
-          title = parts[1].trim();
-        }
-        
-        let artwork = '';
-        if (video.thumbnails && video.thumbnails.length > 0) {
-          artwork = video.thumbnails[video.thumbnails.length - 1].url;
-        } else if (video.thumbnail) {
-          artwork = video.thumbnail;
-        }
+      if (!video || !video.title) return;
 
-        options.push({
-          title,
-          artist,
-          album: albumLabel,
-          artwork,
-          youtubeUrl: video.webpage_url || video.url || `https://www.youtube.com/watch?v=${video.id}`
-        });
+      const rawUrl = video.webpage_url || video.url || '';
+      const id = video.id || '';
+
+      // Skip channels, playlists, or user profiles appearing in search results
+      if (
+        video._type === 'channel' || 
+        video._type === 'playlist' || 
+        rawUrl.includes('/channel/') || 
+        rawUrl.includes('/user/') || 
+        rawUrl.includes('/@') || 
+        rawUrl.includes('/c/') ||
+        id.startsWith('UC')
+      ) {
+        return;
       }
+
+      let title = video.title;
+      let artist = video.uploader || 'Unknown Artist';
+      if (title.includes(' - ')) {
+        const parts = title.split(' - ');
+        artist = parts[0].trim();
+        title = parts[1].trim();
+      }
+      
+      let artwork = '';
+      if (video.thumbnails && video.thumbnails.length > 0) {
+        artwork = video.thumbnails[video.thumbnails.length - 1].url;
+      } else if (video.thumbnail) {
+        artwork = video.thumbnail;
+      }
+
+      const youtubeUrl = rawUrl.startsWith('http')
+        ? rawUrl
+        : `https://www.youtube.com/watch?v=${id}`;
+
+      options.push({
+        title,
+        artist,
+        album: albumLabel,
+        artwork,
+        youtubeUrl
+      });
     });
   }
   return options;
@@ -644,13 +664,18 @@ router.post('/api/download', async (req, res) => {
 
   let downloadUrl = youtubeUrl;
   if (downloadUrl && typeof downloadUrl === 'string') {
-    const vMatch = downloadUrl.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
-    if (vMatch) {
-      downloadUrl = `https://www.youtube.com/watch?v=${vMatch[1]}`;
+    // If a channel or user URL was passed, discard it so fallback search takes over!
+    if (downloadUrl.includes('/channel/') || downloadUrl.includes('/user/') || downloadUrl.includes('/@') || downloadUrl.includes('/c/')) {
+      downloadUrl = null;
     } else {
-      const shortMatch = downloadUrl.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
-      if (shortMatch) {
-        downloadUrl = `https://www.youtube.com/watch?v=${shortMatch[1]}`;
+      const vMatch = downloadUrl.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+      if (vMatch) {
+        downloadUrl = `https://www.youtube.com/watch?v=${vMatch[1]}`;
+      } else {
+        const shortMatch = downloadUrl.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+        if (shortMatch) {
+          downloadUrl = `https://www.youtube.com/watch?v=${shortMatch[1]}`;
+        }
       }
     }
   }
